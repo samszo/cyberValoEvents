@@ -1,16 +1,16 @@
 // Client OpenAI — appels directs depuis le navigateur
 import { getApiKey } from './storage.js';
 
-// Passe par le reverse proxy Apache (/proxy/albert/) pour éviter le CORS.
-// Le proxy est configuré dans albert-proxy.conf (voir la racine du projet).
-const BASE = '/proxy/albert';
+// Toutes les requêtes passent par proxy.php pour éviter le CORS.
+const PROXY = '/proxy.php';
+const apiUrl = path => `${PROXY}?path=${path}`;
 const MODEL = 'gpt-4o-mini';
 
 async function complete(messages, { temperature = 0.7, max_tokens = 1200 } = {}) {
   const key = getApiKey();
   if (!key) throw new Error('Clé API non configurée. Cliquez sur "Clé API" pour la renseigner.');
 
-  const res = await fetch(BASE + '/chat/completions', {
+  const res = await fetch(apiUrl('chat/completions'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({ model: MODEL, messages, temperature, max_tokens })
@@ -32,12 +32,9 @@ Réponds en français, de manière précise, professionnelle et bienveillante.`;
 
 export async function getModels() {
   const key = getApiKey();
-  const response = await fetch(BASE + '/models', {
-      method: 'GET',
-      headers: {
-        "Authorization": "Bearer "+key,
-        "Accept": "*/*"
-      },
+  const response = await fetch(apiUrl('models'), {
+    method: 'GET',
+    headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' },
   });
 
   const data = await response.json();
