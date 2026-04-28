@@ -1,523 +1,356 @@
-/* ─── CyberValoEvents — Paris 8 ─── */
-const API = '';
+// Point d'entrée principal — modules ES natifs
+import { loadEvents, saveEvents, getApiKey, saveApiKey } from './storage.js';
+import { SAMPLE_EVENTS } from './sampleData.js';
+import { generateId, showToast, fmt, typeBadgeCls, statusBadgeCls } from './utils.js';
+import { renderDashboard } from './views/dashboard.js';
+import { renderEvents }    from './views/events.js';
+import { initCalendar, renderCalendar, calPrev, calNext } from './views/calendar.js';
+import { initChat }        from './views/chat.js';
+import { generateDescription, generateReport, suggestIdeas } from './openai.js';
 
-// ── State ──────────────────────────────────────────
-let allEvents = [];
-let currentEventId = null;
-let calYear, calMonth;
-let chatHistory = [];
-let generatedDescription = '';
+// ── État global ────────────────────────────────────────────────────────────
+let events = loadEvents() || SAMPLE_EVENTS;
+let currentId = null;
+let generatedDesc = '';
 
-// ── Utils ──────────────────────────────────────────
-const $ = id => document.getElementById(id);
-const fmt = d => d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-const fmtNum = n => Number(n || 0).toLocaleString('fr-FR');
-const fmtEur = n => Number(n || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+// ── Bootstrap modals ───────────────────────────────────────────────────────
+const bsModal = id => bootstrap.Modal.getOrCreateInstance(document.getElementById(id));
 
-function typeBadgeClass(type) {
-  const map = {
-    'colloque': 'badge-colloque', 'conférence': 'badge-conférence',
-    'séminaire': 'badge-séminaire', 'workshop': 'badge-workshop',
-    "journée d'étude": 'badge-journée', 'exposition': 'badge-exposition'
-  };
-  return map[type] || 'badge-autre';
-}
+// ── Navigation ─────────────────────────────────────────────────────────────
+const VIEWS = { dashboard: 'Tableau de bord', events: 'Événements', calendar: 'Calendrier', ai: 'Assistant IA' };
 
-function statusClass(s) { return 'status-' + s.replace(' ', '-'); }
-
-function showToast(msg, type = 'success') {
-  const t = document.createElement('div');
-  t.className = `toast toast-${type}`;
-  t.textContent = msg;
-  $('toastContainer').appendChild(t);
-  setTimeout(() => t.remove(), 3500);
-}
-
-async function apiFetch(path, opts = {}) {
-  const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Erreur réseau' }));
-    throw new Error(err.error || 'Erreur');
-  }
-  return res.json();
-}
-
-// ── Navigation ────────────────────────────────────
 function setView(name) {
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const view = $('view-' + name);
-  if (view) view.classList.add('active');
-  const navItem = document.querySelector(`[data-view="${name}"]`);
-  if (navItem) navItem.classList.add('active');
-  const titles = { dashboard: 'Tableau de bord', events: 'Événements', calendar: 'Calendrier', ai: 'Assistant IA' };
-  $('topbarTitle').textContent = titles[name] || name;
-  if (name === 'dashboard') loadDashboard();
-  if (name === 'events') loadEventsList();
-  if (name === 'calendar') renderCalendar();
+  document.querySelectorAll('.view').forEach(v => v.classList.add('d-none'));
+  const v = document.getElementById('view-' + name);
+  if (v) v.classList.remove('d-none');
+
+  document.querySelectorAll('[data-view]').forEach(a => {
+    a.classList.toggle('active', a.dataset.view === name);
+    a.classList.toggle('text-white-50', a.dataset.view !== name);
+    a.classList.toggle('text-white',    a.dataset.view === name);
+  });
+  document.getElementById('topbarTitle').textContent = VIEWS[name] || name;
+
+  if (name === 'dashboard') renderDashboard(events, openDetail);
+  if (name === 'events')    renderFilteredEvents();
+  if (name === 'calendar')  renderCalendar(events, openDetail);
 }
 
-document.querySelectorAll('.nav-item').forEach(item => {
-  item.addEventListener('click', e => {
+document.querySelectorAll('[data-view]').forEach(link => {
+  link.addEventListener('click', e => {
     e.preventDefault();
-    setView(item.dataset.view);
-    if (window.innerWidth < 768) $('sidebar').classList.remove('open');
+    setView(link.dataset.view);
+    document.getElementById('sidebar').classList.remove('open');
   });
 });
-document.querySelectorAll('.card-link').forEach(link => {
-  link.addEventListener('click', e => { e.preventDefault(); setView(link.dataset.view); });
+
+// ── Sidebar mobile ─────────────────────────────────────────────────────────
+document.getElementById('sidebarToggle')?.addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
 });
-$('menuToggle').addEventListener('click', () => $('sidebar').classList.toggle('open'));
 
-// ── Dashboard ─────────────────────────────────────
-async function loadDashboard() {
-  try {
-    const [stats, events] = await Promise.all([apiFetch('/api/stats'), apiFetch('/api/events')]);
-    allEvents = events;
+// ── Filtres événements ─────────────────────────────────────────────────────
+let searchTimer;
+['searchInput', 'filterStatus', 'filterType'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener(id === 'searchInput' ? 'input' : 'change', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderFilteredEvents, 250);
+  });
+});
 
-    $('statTotal').textContent = stats.total;
-    $('statUpcoming').textContent = stats.upcoming;
-    $('statDone').textContent = stats.terminé;
-    $('statParticipants').textContent = fmtNum(stats.totalParticipants);
-    $('statBudget').textContent = fmtEur(stats.totalBudget);
+function renderFilteredEvents() {
+  const q      = (document.getElementById('searchInput').value || '').toLowerCase();
+  const status = document.getElementById('filterStatus').value;
+  const type   = document.getElementById('filterType').value;
 
-    // Upcoming
-    const upcoming = events.filter(e => new Date(e.date) >= new Date() && e.status !== 'annulé')
-      .sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 5);
-    $('upcomingList').innerHTML = upcoming.length ? upcoming.map(eventItemHtml).join('') :
-      '<div class="empty-state"><div class="empty-state-icon">📅</div><div class="empty-state-text">Aucun événement à venir</div></div>';
+  const filtered = events.filter(e => {
+    if (status && e.status !== status) return false;
+    if (type   && e.type   !== type)   return false;
+    if (q && !`${e.title} ${e.description} ${e.laboratory}`.toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    // Ongoing
-    const ongoing = events.filter(e => e.status === 'en cours').slice(0, 4);
-    $('ongoingList').innerHTML = ongoing.length ? ongoing.map(eventItemHtml).join('') :
-      '<div class="empty-state"><div class="empty-state-icon">⏳</div><div class="empty-state-text">Aucun événement en cours</div></div>';
-
-    // Type chart
-    const total = stats.total || 1;
-    $('typeChart').innerHTML = Object.entries(stats.byType).map(([type, count]) => `
-      <div class="type-bar-row">
-        <div class="type-bar-label">${type}</div>
-        <div class="type-bar-track"><div class="type-bar-fill" style="width:${Math.round(count / total * 100)}%"></div></div>
-        <div class="type-bar-count">${count}</div>
-      </div>`).join('');
-
-    // Domains
-    const domains = Object.entries(stats.byDomain).sort((a, b) => b[1] - a[1]).slice(0, 14);
-    $('domainTags').innerHTML = domains.map(([d, c]) =>
-      `<span class="tag tag-domain">${d} <span class="tag-count">${c}</span></span>`).join('');
-
-    attachEventItemListeners();
-  } catch (err) { showToast('Erreur de chargement: ' + err.message, 'error'); }
+  renderEvents(filtered, { onDetail: openDetail, onEdit: openEdit, onDelete: deleteEvent });
 }
 
-function eventItemHtml(e) {
-  return `<div class="event-item status-${e.status.replace(' ', '-')}" data-id="${e.id}">
-    <div class="event-item-info">
-      <div class="event-item-title">${e.title}</div>
-      <div class="event-item-meta">${e.laboratory || e.organizer || ''}</div>
+// ── Calendrier ─────────────────────────────────────────────────────────────
+initCalendar();
+document.getElementById('calPrev').addEventListener('click', () => calPrev(events, openDetail));
+document.getElementById('calNext').addEventListener('click', () => calNext(events, openDetail));
+
+// ── Détail événement ───────────────────────────────────────────────────────
+function openDetail(id) {
+  const ev = events.find(e => e.id === id);
+  if (!ev) return;
+  currentId = id;
+  document.getElementById('detailModalTitle').textContent = ev.title;
+  document.getElementById('detailModalBody').innerHTML = detailHtml(ev);
+  bsModal('detailModal').show();
+}
+
+function detailHtml(ev) {
+  const multiDay = ev.endDate && ev.endDate !== ev.date;
+  return `
+  <div class="row g-3 small">
+    <div class="col-6">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Type</div>
+      <span class="badge ${typeBadgeCls(ev.type)}">${ev.type}</span>
     </div>
-    <div class="event-item-date">${fmt(e.date)}</div>
+    <div class="col-6">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Statut</div>
+      <span class="badge ${statusBadgeCls(ev.status)}">${ev.status}</span>
+    </div>
+    <div class="col-6">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Date</div>
+      ${fmt(ev.date)}${multiDay ? ' → ' + fmt(ev.endDate) : ''}
+    </div>
+    <div class="col-6">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Lieu</div>
+      ${ev.location || '—'}
+    </div>
+    <div class="col-6">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Organisateur</div>
+      ${ev.organizer || '—'}
+    </div>
+    <div class="col-6">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Laboratoire</div>
+      ${ev.laboratory || '—'}
+    </div>
+    <div class="col-6">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Participants</div>
+      ${Number(ev.participants || 0).toLocaleString('fr-FR')}
+    </div>
+    <div class="col-6">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Budget</div>
+      ${Number(ev.budget || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+    </div>
+    ${ev.domains?.length ? `
+    <div class="col-12">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Domaines</div>
+      <div class="d-flex flex-wrap gap-1">
+        ${ev.domains.map(d => `<span class="badge bg-primary-subtle text-primary">${d}</span>`).join('')}
+      </div>
+    </div>` : ''}
+    ${ev.objectives ? `
+    <div class="col-12">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Objectifs</div>
+      <p class="mb-0">${ev.objectives}</p>
+    </div>` : ''}
+    ${ev.description ? `
+    <div class="col-12">
+      <div class="text-muted fw-semibold mb-1" style="font-size:.68rem;text-transform:uppercase">Description</div>
+      <div class="bg-light border rounded p-2">${ev.description}</div>
+    </div>` : ''}
   </div>`;
 }
 
-function attachEventItemListeners() {
-  document.querySelectorAll('.event-item').forEach(el => {
-    el.addEventListener('click', () => openDetail(el.dataset.id));
-  });
-}
+document.getElementById('detailEditBtn').addEventListener('click', () => {
+  bsModal('detailModal').hide();
+  openEdit(currentId);
+});
+document.getElementById('detailReportBtn').addEventListener('click', () => {
+  bsModal('detailModal').hide();
+  doGenerateReport(currentId);
+});
 
-// ── Events List ───────────────────────────────────
-async function loadEventsList() {
-  const search = $('searchInput').value;
-  const status = $('filterStatus').value;
-  const type = $('filterType').value;
-  const params = new URLSearchParams();
-  if (search) params.set('search', search);
-  if (status) params.set('status', status);
-  if (type) params.set('type', type);
-  try {
-    const events = await apiFetch('/api/events?' + params);
-    allEvents = events;
-    renderEventCards(events);
-  } catch (err) { showToast('Erreur: ' + err.message, 'error'); }
-}
+// ── Formulaire événement ───────────────────────────────────────────────────
+document.getElementById('newEventBtn').addEventListener('click', () => openCreate());
 
-function renderEventCards(events) {
-  if (!events.length) {
-    $('eventsList').innerHTML = `<div class="empty-state" style="grid-column:1/-1">
-      <div class="empty-state-icon">🔍</div>
-      <div class="empty-state-text">Aucun événement trouvé</div></div>`;
-    return;
-  }
-  $('eventsList').innerHTML = events.map(e => `
-    <div class="event-card" data-id="${e.id}">
-      <div class="event-card-top">
-        <span class="event-type-badge ${typeBadgeClass(e.type)}">${e.type}</span>
-        <div class="event-card-title">${e.title}</div>
-      </div>
-      <div class="event-card-body">
-        <div class="event-card-meta">
-          <div class="event-meta-row"><span class="event-meta-icon">📅</span>${fmt(e.date)}${e.endDate && e.endDate !== e.date ? ' → ' + fmt(e.endDate) : ''}</div>
-          ${e.location ? `<div class="event-meta-row"><span class="event-meta-icon">📍</span>${e.location}</div>` : ''}
-          ${e.organizer ? `<div class="event-meta-row"><span class="event-meta-icon">👤</span>${e.organizer}</div>` : ''}
-          ${e.laboratory ? `<div class="event-meta-row"><span class="event-meta-icon">🔬</span>${e.laboratory}</div>` : ''}
-        </div>
-        <div class="detail-tags">
-          ${(e.domains || []).slice(0, 3).map(d => `<span class="tag tag-domain">${d}</span>`).join('')}
-        </div>
-      </div>
-      <div class="event-card-footer">
-        <span class="status-badge ${statusClass(e.status)}">${e.status}</span>
-        <div class="event-card-actions">
-          <span class="event-meta-row" style="margin-right:8px"><span class="event-meta-icon">👥</span>${fmtNum(e.participants)}</span>
-          <button class="btn-icon edit-btn" data-id="${e.id}" title="Modifier">✏️</button>
-          <button class="btn-icon delete-btn" data-id="${e.id}" title="Supprimer">🗑️</button>
-        </div>
-      </div>
-    </div>`).join('');
-
-  document.querySelectorAll('.event-card').forEach(c => {
-    c.addEventListener('click', () => openDetail(c.dataset.id));
-  });
-  document.querySelectorAll('.edit-btn').forEach(b => {
-    b.addEventListener('click', e => { e.stopPropagation(); openEdit(b.dataset.id); });
-  });
-  document.querySelectorAll('.delete-btn').forEach(b => {
-    b.addEventListener('click', e => { e.stopPropagation(); deleteEvent(b.dataset.id); });
-  });
-}
-
-let searchTimer;
-$('searchInput').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadEventsList, 300); });
-$('filterStatus').addEventListener('change', loadEventsList);
-$('filterType').addEventListener('change', loadEventsList);
-
-// ── Event Form ────────────────────────────────────
 function openCreate() {
-  $('eventForm').reset();
-  $('eventId').value = '';
-  $('modalTitle').textContent = 'Nouvel événement';
-  $('eventModal').classList.add('open');
+  document.getElementById('eventForm').reset();
+  document.getElementById('fId').value = '';
+  document.getElementById('eventModalTitle').textContent = 'Nouvel événement';
+  bsModal('eventModal').show();
 }
 
 function openEdit(id) {
-  const ev = allEvents.find(e => e.id === id);
+  const ev = events.find(e => e.id === id);
   if (!ev) return;
-  $('eventId').value = ev.id;
-  $('fTitle').value = ev.title || '';
-  $('fType').value = ev.type || '';
-  $('fStatus').value = ev.status || 'planifié';
-  $('fDate').value = ev.date || '';
-  $('fEndDate').value = ev.endDate || '';
-  $('fLocation').value = ev.location || '';
-  $('fOrganizer').value = ev.organizer || '';
-  $('fLaboratory').value = ev.laboratory || '';
-  $('fParticipants').value = ev.participants || '';
-  $('fBudget').value = ev.budget || '';
-  $('fDomains').value = (ev.domains || []).join(', ');
-  $('fObjectives').value = ev.objectives || '';
-  $('fDescription').value = ev.description || '';
-  $('modalTitle').textContent = 'Modifier l\'événement';
-  $('eventModal').classList.add('open');
+  document.getElementById('fId').value          = ev.id;
+  document.getElementById('fTitle').value       = ev.title || '';
+  document.getElementById('fType').value        = ev.type || '';
+  document.getElementById('fStatus').value      = ev.status || 'planifié';
+  document.getElementById('fDate').value        = ev.date || '';
+  document.getElementById('fEndDate').value     = ev.endDate || '';
+  document.getElementById('fLocation').value   = ev.location || '';
+  document.getElementById('fOrganizer').value  = ev.organizer || '';
+  document.getElementById('fLaboratory').value = ev.laboratory || '';
+  document.getElementById('fParticipants').value = ev.participants || '';
+  document.getElementById('fBudget').value     = ev.budget || '';
+  document.getElementById('fDomains').value    = (ev.domains || []).join(', ');
+  document.getElementById('fObjectives').value = ev.objectives || '';
+  document.getElementById('fDescription').value= ev.description || '';
+  document.getElementById('eventModalTitle').textContent = 'Modifier l\'événement';
+  bsModal('eventModal').show();
 }
 
-function closeModal(id) { $(id).classList.remove('open'); }
+document.getElementById('saveEventBtn').addEventListener('click', () => {
+  const id      = document.getElementById('fId').value;
+  const title   = document.getElementById('fTitle').value.trim();
+  const type    = document.getElementById('fType').value;
+  const date    = document.getElementById('fDate').value;
 
-$('newEventBtn').addEventListener('click', openCreate);
-$('modalClose').addEventListener('click', () => closeModal('eventModal'));
-$('cancelBtn').addEventListener('click', () => closeModal('eventModal'));
-$('eventModal').addEventListener('click', e => { if (e.target === $('eventModal')) closeModal('eventModal'); });
+  if (!title || !type || !date) {
+    showToast('Veuillez remplir les champs obligatoires (titre, type, date)', 'error');
+    return;
+  }
 
-$('saveEventBtn').addEventListener('click', async () => {
-  const id = $('eventId').value;
   const payload = {
-    title: $('fTitle').value.trim(),
-    type: $('fType').value,
-    status: $('fStatus').value,
-    date: $('fDate').value,
-    endDate: $('fEndDate').value,
-    location: $('fLocation').value.trim(),
-    organizer: $('fOrganizer').value.trim(),
-    laboratory: $('fLaboratory').value.trim(),
-    participants: Number($('fParticipants').value) || 0,
-    budget: Number($('fBudget').value) || 0,
-    domains: $('fDomains').value.split(',').map(s => s.trim()).filter(Boolean),
-    objectives: $('fObjectives').value.trim(),
-    description: $('fDescription').value.trim()
+    title, type, date,
+    status:      document.getElementById('fStatus').value,
+    endDate:     document.getElementById('fEndDate').value,
+    location:    document.getElementById('fLocation').value.trim(),
+    organizer:   document.getElementById('fOrganizer').value.trim(),
+    laboratory:  document.getElementById('fLaboratory').value.trim(),
+    participants: Number(document.getElementById('fParticipants').value) || 0,
+    budget:       Number(document.getElementById('fBudget').value) || 0,
+    domains:      document.getElementById('fDomains').value.split(',').map(s => s.trim()).filter(Boolean),
+    objectives:   document.getElementById('fObjectives').value.trim(),
+    description:  document.getElementById('fDescription').value.trim(),
   };
-  if (!payload.title || !payload.type || !payload.date) {
-    showToast('Veuillez remplir les champs obligatoires', 'error'); return;
+
+  if (id) {
+    const idx = events.findIndex(e => e.id === id);
+    events[idx] = { ...events[idx], ...payload, updatedAt: new Date().toISOString() };
+    showToast('Événement mis à jour');
+  } else {
+    events.unshift({ id: generateId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...payload });
+    showToast('Événement créé');
   }
-  try {
-    if (id) {
-      await apiFetch('/api/events/' + id, { method: 'PUT', body: payload });
-      showToast('Événement mis à jour');
-    } else {
-      await apiFetch('/api/events', { method: 'POST', body: payload });
-      showToast('Événement créé');
-    }
-    closeModal('eventModal');
-    loadEventsList();
-    loadDashboard();
-  } catch (err) { showToast('Erreur: ' + err.message, 'error'); }
+
+  saveEvents(events);
+  bsModal('eventModal').hide();
+  refreshCurrentView();
 });
 
-async function deleteEvent(id) {
-  if (!confirm('Supprimer cet événement ?')) return;
-  try {
-    await apiFetch('/api/events/' + id, { method: 'DELETE' });
-    showToast('Événement supprimé', 'info');
-    allEvents = allEvents.filter(e => e.id !== id);
-    renderEventCards(allEvents);
-    loadDashboard();
-  } catch (err) { showToast('Erreur: ' + err.message, 'error'); }
+function deleteEvent(id) {
+  if (!confirm('Supprimer cet événement définitivement ?')) return;
+  events = events.filter(e => e.id !== id);
+  saveEvents(events);
+  showToast('Événement supprimé', 'info');
+  refreshCurrentView();
 }
 
-// ── Detail Modal ──────────────────────────────────
-function openDetail(id) {
-  const ev = allEvents.find(e => e.id === id);
-  if (!ev) return;
-  currentEventId = id;
-  $('detailTitle').textContent = ev.title;
-  $('detailBody').innerHTML = `
-    <div class="detail-grid">
-      <div>
-        <div class="detail-label">Type</div>
-        <div class="detail-value"><span class="event-type-badge ${typeBadgeClass(ev.type)}">${ev.type}</span></div>
-      </div>
-      <div>
-        <div class="detail-label">Statut</div>
-        <div class="detail-value"><span class="status-badge ${statusClass(ev.status)}">${ev.status}</span></div>
-      </div>
-      <div>
-        <div class="detail-label">Date</div>
-        <div class="detail-value">${fmt(ev.date)}${ev.endDate && ev.endDate !== ev.date ? ' → ' + fmt(ev.endDate) : ''}</div>
-      </div>
-      <div>
-        <div class="detail-label">Lieu</div>
-        <div class="detail-value">${ev.location || '—'}</div>
-      </div>
-      <div>
-        <div class="detail-label">Organisateur</div>
-        <div class="detail-value">${ev.organizer || '—'}</div>
-      </div>
-      <div>
-        <div class="detail-label">Laboratoire</div>
-        <div class="detail-value">${ev.laboratory || '—'}</div>
-      </div>
-      <div>
-        <div class="detail-label">Participants</div>
-        <div class="detail-value">${fmtNum(ev.participants)}</div>
-      </div>
-      <div>
-        <div class="detail-label">Budget</div>
-        <div class="detail-value">${fmtEur(ev.budget)}</div>
-      </div>
-      ${ev.domains?.length ? `<div class="detail-full">
-        <div class="detail-label">Domaines</div>
-        <div class="detail-tags">${ev.domains.map(d => `<span class="tag tag-domain">${d}</span>`).join('')}</div>
-      </div>` : ''}
-      ${ev.objectives ? `<div class="detail-full">
-        <div class="detail-label">Objectifs</div>
-        <div class="detail-value">${ev.objectives}</div>
-      </div>` : ''}
-      ${ev.description ? `<div class="detail-full">
-        <div class="detail-label">Description</div>
-        <div class="detail-desc">${ev.description}</div>
-      </div>` : ''}
-    </div>`;
-  $('detailModal').classList.add('open');
+function refreshCurrentView() {
+  const active = document.querySelector('.view:not(.d-none)');
+  if (!active) return;
+  const id = active.id.replace('view-', '');
+  setView(id);
 }
 
-$('detailClose').addEventListener('click', () => closeModal('detailModal'));
-$('detailClose2').addEventListener('click', () => closeModal('detailModal'));
-$('detailModal').addEventListener('click', e => { if (e.target === $('detailModal')) closeModal('detailModal'); });
-$('detailEdit').addEventListener('click', () => { closeModal('detailModal'); openEdit(currentEventId); });
-$('detailReport').addEventListener('click', () => generateReport(currentEventId));
-
-// ── Calendar ──────────────────────────────────────
-function renderCalendar() {
-  const now = new Date();
-  if (!calYear) { calYear = now.getFullYear(); calMonth = now.getMonth(); }
-
-  const title = new Date(calYear, calMonth, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-  $('calTitle').textContent = title.charAt(0).toUpperCase() + title.slice(1);
-
-  const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-  const firstDay = new Date(calYear, calMonth, 1);
-  const lastDay = new Date(calYear, calMonth + 1, 0);
-  let startDow = firstDay.getDay() - 1; if (startDow < 0) startDow = 6;
-
-  let html = days.map(d => `<div class="cal-day-header">${d}</div>`).join('');
-  for (let i = 0; i < startDow; i++) {
-    const d = new Date(firstDay); d.setDate(d.getDate() - (startDow - i));
-    html += `<div class="cal-day other-month"><div class="cal-day-num">${d.getDate()}</div></div>`;
+// ── Génération description IA ──────────────────────────────────────────────
+document.getElementById('generateDescBtn').addEventListener('click', async () => {
+  const title = document.getElementById('fTitle').value.trim();
+  const type  = document.getElementById('fType').value;
+  if (!title || !type) {
+    showToast('Renseignez le titre et le type avant de générer', 'error'); return;
   }
-  for (let d = 1; d <= lastDay.getDate(); d++) {
-    const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const todayStr = now.toISOString().slice(0, 10);
-    const dayEvents = allEvents.filter(e => e.date === dateStr || (e.date <= dateStr && e.endDate >= dateStr));
-    html += `<div class="cal-day${dateStr === todayStr ? ' today' : ''}" data-date="${dateStr}">
-      <div class="cal-day-num">${d}</div>
-      <div class="cal-day-events">${dayEvents.map(e => `<div class="cal-event-dot" title="${e.title}">${e.title}</div>`).join('')}</div>
-    </div>`;
-  }
-  $('calendarGrid').innerHTML = html;
-
-  const monthEvents = allEvents.filter(e => {
-    const d = new Date(e.date);
-    return d.getFullYear() === calYear && d.getMonth() === calMonth;
-  }).sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  $('calEventList').innerHTML = monthEvents.length
-    ? monthEvents.map(e => `<div class="cal-event-entry" data-id="${e.id}">
-        <span class="event-type-badge ${typeBadgeClass(e.type)}">${e.type}</span>
-        <div style="flex:1">
-          <div class="event-item-title">${e.title}</div>
-          <div class="event-item-meta">${fmt(e.date)}</div>
-        </div>
-        <span class="status-badge ${statusClass(e.status)}">${e.status}</span>
-      </div>`).join('')
-    : '<div class="empty-state"><div class="empty-state-text">Aucun événement ce mois-ci</div></div>';
-
-  document.querySelectorAll('.cal-event-entry').forEach(el => {
-    el.addEventListener('click', () => openDetail(el.dataset.id));
-  });
-}
-
-$('calPrev').addEventListener('click', () => {
-  calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar();
-});
-$('calNext').addEventListener('click', () => {
-  calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar();
-});
-
-// ── AI Generate Description ───────────────────────
-$('generateDescBtn').addEventListener('click', async () => {
-  const title = $('fTitle').value.trim();
-  const type = $('fType').value;
-  if (!title || !type) { showToast('Renseignez le titre et le type pour générer une description', 'error'); return; }
-
-  $('aiDescOutput').textContent = 'Génération en cours...';
-  $('aiDescModal').classList.add('open');
+  document.getElementById('aiDescOutput').textContent = 'Génération en cours…';
+  bsModal('aiDescModal').show();
   try {
-    const res = await apiFetch('/api/ai/generate-description', {
-      method: 'POST',
-      body: { title, type, domains: $('fDomains').value.split(',').map(s => s.trim()).filter(Boolean), objectives: $('fObjectives').value }
+    generatedDesc = await generateDescription({
+      title, type,
+      domains:    document.getElementById('fDomains').value.split(',').map(s => s.trim()).filter(Boolean),
+      objectives: document.getElementById('fObjectives').value
     });
-    generatedDescription = res.description;
-    $('aiDescOutput').textContent = res.description;
+    document.getElementById('aiDescOutput').textContent = generatedDesc;
   } catch (err) {
-    $('aiDescOutput').textContent = 'Erreur: ' + err.message;
+    document.getElementById('aiDescOutput').textContent = '⚠️ ' + err.message;
   }
 });
 
-$('aiDescClose').addEventListener('click', () => closeModal('aiDescModal'));
-$('aiDescClose2').addEventListener('click', () => closeModal('aiDescModal'));
-$('aiDescUse').addEventListener('click', () => { $('fDescription').value = generatedDescription; closeModal('aiDescModal'); });
+document.getElementById('aiDescUseBtn').addEventListener('click', () => {
+  document.getElementById('fDescription').value = generatedDesc;
+  bsModal('aiDescModal').hide();
+});
 
-// ── AI Report ─────────────────────────────────────
-async function generateReport(id) {
-  $('reportOutput').textContent = 'Génération du rapport en cours...';
-  $('reportModal').classList.add('open');
-  closeModal('detailModal');
+// ── Rapport IA ─────────────────────────────────────────────────────────────
+async function doGenerateReport(id) {
+  const ev = events.find(e => e.id === id);
+  if (!ev) return;
+  document.getElementById('reportOutput').textContent = 'Génération du rapport en cours…';
+  bsModal('reportModal').show();
   try {
-    const res = await apiFetch('/api/ai/generate-report', { method: 'POST', body: { eventId: id } });
-    $('reportOutput').textContent = res.report;
+    const report = await generateReport(ev);
+    document.getElementById('reportOutput').textContent = report;
   } catch (err) {
-    $('reportOutput').textContent = 'Erreur: ' + err.message;
+    document.getElementById('reportOutput').textContent = '⚠️ ' + err.message;
   }
 }
 
-$('reportClose').addEventListener('click', () => closeModal('reportModal'));
-$('reportClose2').addEventListener('click', () => closeModal('reportModal'));
-$('reportCopy').addEventListener('click', () => {
-  navigator.clipboard.writeText($('reportOutput').textContent).then(() => showToast('Rapport copié'));
+document.getElementById('reportCopyBtn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('reportOutput').textContent)
+    .then(() => showToast('Rapport copié'));
 });
 
-// ── AI Tools Panel ────────────────────────────────
-$('toolGenerateDesc').addEventListener('click', () => {
+// ── Outils IA (panneau assistant) ──────────────────────────────────────────
+document.getElementById('toolGenerateDesc').addEventListener('click', () => {
   setView('events');
-  setTimeout(() => openCreate(), 100);
+  setTimeout(openCreate, 150);
   showToast('Créez un événement puis cliquez sur "Générer avec IA"', 'info');
 });
 
-$('toolGenerateReport').addEventListener('click', async () => {
-  const finished = allEvents.filter(e => e.status === 'terminé');
-  if (!finished.length) { showToast('Aucun événement terminé pour générer un bilan', 'error'); return; }
-  $('aiOutputTitle').textContent = 'Choisissez un événement';
-  $('aiOutput').innerHTML = finished.map(e =>
-    `<button class="tool-btn" style="margin-bottom:6px" onclick="generateReport('${e.id}')">
-      <span class="tool-icon">📄</span><div><div class="tool-name">${e.title}</div><div class="tool-desc">${fmt(e.date)}</div></div>
-    </button>`).join('');
-  $('aiOutputCard').style.display = 'block';
+document.getElementById('toolGenerateReport').addEventListener('click', () => {
+  const finished = events.filter(e => e.status === 'terminé');
+  if (!finished.length) { showToast('Aucun événement terminé', 'error'); return; }
+  const card = document.getElementById('aiOutputCard');
+  document.getElementById('aiOutputTitle').textContent = 'Choisir un événement terminé';
+  document.getElementById('aiOutput').innerHTML = finished.map(e =>
+    `<button class="btn btn-sm btn-outline-secondary w-100 text-start mb-1 ai-report-pick" data-id="${e.id}">
+      <i class="bi bi-file-text me-1"></i>${e.title}</button>`
+  ).join('');
+  card.classList.remove('d-none');
+  document.querySelectorAll('.ai-report-pick').forEach(btn =>
+    btn.addEventListener('click', () => doGenerateReport(btn.dataset.id))
+  );
 });
 
-$('toolSuggestIdeas').addEventListener('click', async () => {
-  $('aiOutputTitle').textContent = 'Idées d\'événements IA';
-  $('aiOutput').textContent = 'Génération en cours...';
-  $('aiOutputCard').style.display = 'block';
+document.getElementById('toolSuggestIdeas').addEventListener('click', async () => {
+  const card = document.getElementById('aiOutputCard');
+  document.getElementById('aiOutputTitle').textContent = 'Idées d\'événements';
+  document.getElementById('aiOutput').textContent = 'Génération en cours…';
+  card.classList.remove('d-none');
   try {
-    const res = await apiFetch('/api/ai/suggest', {
-      method: 'POST',
-      body: { prompt: "Propose 5 idées d'événements innovants de valorisation de la recherche adaptés à une université pluridisciplinaire comme Paris 8, en précisant le format, les thématiques, le public cible et des pistes de financement possibles." }
-    });
-    $('aiOutput').textContent = res.suggestion;
-  } catch (err) { $('aiOutput').textContent = 'Erreur: ' + err.message; }
-});
-
-$('copyOutput').addEventListener('click', () => {
-  navigator.clipboard.writeText($('aiOutput').textContent).then(() => showToast('Copié'));
-});
-
-// ── Chat ──────────────────────────────────────────
-function addChatMessage(role, content, loading = false) {
-  const el = document.createElement('div');
-  el.className = `chat-message ${role}`;
-  const avatarContent = role === 'user' ? 'Vous' : '⚡';
-  el.innerHTML = `<div class="chat-avatar">${avatarContent}</div>
-    <div class="chat-bubble${loading ? ' loading' : ''}">${loading ? '<div class="dot"></div><div class="dot"></div><div class="dot"></div>' : content}</div>`;
-  $('chatMessages').appendChild(el);
-  $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
-  return el;
-}
-
-async function sendChat(msg) {
-  if (!msg.trim()) return;
-  chatHistory.push({ role: 'user', content: msg });
-  addChatMessage('user', msg);
-  $('chatInput').value = '';
-  const loader = addChatMessage('assistant', '', true);
-  try {
-    const stats = await apiFetch('/api/stats').catch(() => null);
-    const res = await apiFetch('/api/ai/chat', {
-      method: 'POST',
-      body: { messages: chatHistory, context: stats }
-    });
-    loader.remove();
-    chatHistory.push({ role: 'assistant', content: res.reply });
-    addChatMessage('assistant', res.reply.replace(/\n/g, '<br>'));
+    document.getElementById('aiOutput').textContent = await suggestIdeas();
   } catch (err) {
-    loader.remove();
-    addChatMessage('assistant', `Erreur : ${err.message}. Vérifiez que votre clé API OpenAI est configurée dans le fichier .env.`);
+    document.getElementById('aiOutput').textContent = '⚠️ ' + err.message;
   }
-}
-
-$('chatSend').addEventListener('click', () => sendChat($('chatInput').value));
-$('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat($('chatInput').value); } });
-document.querySelectorAll('.quick-btn').forEach(btn => {
-  btn.addEventListener('click', () => sendChat(btn.dataset.msg));
 });
 
-// ── Init ──────────────────────────────────────────
-async function init() {
-  try {
-    allEvents = await apiFetch('/api/events');
-  } catch (e) { /* handled per view */ }
-  loadDashboard();
+document.getElementById('copyOutput').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('aiOutput').textContent)
+    .then(() => showToast('Copié'));
+});
+
+// ── Paramètres (clé API) ───────────────────────────────────────────────────
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  const key = getApiKey();
+  document.getElementById('apiKeyInput').value = key;
+  document.getElementById('apiKeyStatus').innerHTML = key
+    ? '<div class="alert alert-success py-1 small mb-0"><i class="bi bi-check-circle me-1"></i>Clé configurée</div>'
+    : '<div class="alert alert-warning py-1 small mb-0"><i class="bi bi-exclamation-triangle me-1"></i>Aucune clé — fonctions IA désactivées</div>';
+  bsModal('settingsModal').show();
+});
+
+document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (key && !key.startsWith('sk-')) {
+    showToast('La clé doit commencer par sk-', 'error'); return;
+  }
+  saveApiKey(key);
+  bsModal('settingsModal').hide();
+  showToast(key ? 'Clé API enregistrée' : 'Clé API supprimée', key ? 'success' : 'info');
+});
+
+// ── Chat ────────────────────────────────────────────────────────────────────
+initChat();
+
+// ── Init ────────────────────────────────────────────────────────────────────
+setView('dashboard');
+
+// Afficher un indicateur si la clé API n'est pas configurée
+if (!getApiKey()) {
+  showToast('Configurez votre clé OpenAI via "Clé API" pour activer l\'assistant IA', 'info');
 }
-init();
