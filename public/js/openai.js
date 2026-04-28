@@ -1,14 +1,16 @@
 // Client OpenAI — appels directs depuis le navigateur
 import { getApiKey } from './storage.js';
 
-const BASE = 'https://api.openai.com/v1/chat/completions';
+// Passe par le reverse proxy Apache (/proxy/albert/) pour éviter le CORS.
+// Le proxy est configuré dans albert-proxy.conf (voir la racine du projet).
+const BASE = '/proxy/albert';
 const MODEL = 'gpt-4o-mini';
 
 async function complete(messages, { temperature = 0.7, max_tokens = 1200 } = {}) {
   const key = getApiKey();
-  if (!key) throw new Error('Clé API OpenAI non configurée. Cliquez sur "Clé API" pour la renseigner.');
+  if (!key) throw new Error('Clé API non configurée. Cliquez sur "Clé API" pour la renseigner.');
 
-  const res = await fetch(BASE, {
+  const res = await fetch(BASE + '/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({ model: MODEL, messages, temperature, max_tokens })
@@ -27,6 +29,22 @@ const SYSTEM_BASE = `Tu es CyberValo, un assistant expert en valorisation de la 
 Tu aides à piloter les événements scientifiques : colloques, séminaires, workshops, journées d'étude, expositions, etc.
 Tu connais les dispositifs de financement (ANR, H2020/Horizon Europe, Région Île-de-France, MSH Paris Nord), les processus universitaires et les enjeux de diffusion scientifique.
 Réponds en français, de manière précise, professionnelle et bienveillante.`;
+
+export async function getModels() {
+  const key = getApiKey();
+  const response = await fetch(BASE + '/models', {
+      method: 'GET',
+      headers: {
+        "Authorization": "Bearer "+key,
+        "Accept": "*/*"
+      },
+  });
+
+  const data = await response.json();
+  return data;
+  
+}
+
 
 export async function chat(messages, statsContext = null) {
   const systemContent = SYSTEM_BASE + (statsContext
