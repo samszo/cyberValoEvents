@@ -1,7 +1,7 @@
 {
   "name": "cyber-valo-events",
   "version": "1.0.0",
-  "description": "Pilotage des événements de valorisation de la recherche - Paris 8",
+  "description": "Application de gestion des événements de valorisation des chercheurs - Université Paris 8",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,12 +9,12 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "openai": "^4.20.1",
-    "dotenv": "^16.3.1",
-    "uuid": "^9.0.0",
-    "cors": "^2.8.5"
+    "openai": "^4.28.0",
+    "dotenv": "^16.4.1",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.3"
   }
 }

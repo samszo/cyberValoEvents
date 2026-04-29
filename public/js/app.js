@@ -1,523 +1,556 @@
-/* ─── CyberValoEvents — Paris 8 ─── */
-const API = '';
+/* ===== State ===== */
+const state = {
+  events: [],
+  currentTags: [],
+  editingId: null,
+  chatHistory: []
+};
 
-// ── State ──────────────────────────────────────────
-let allEvents = [];
-let currentEventId = null;
-let calYear, calMonth;
-let chatHistory = [];
-let generatedDescription = '';
+/* ===== Type → CSS class ===== */
+const TYPE_CLASS = {
+  'Conférence': 'type-conf',
+  'Séminaire': 'type-semi',
+  'Publication': 'type-pub',
+  'Brevet': 'type-brev',
+  'Prix / Distinction': 'type-prix',
+  'Contrat de recherche': 'type-cont',
+  'Partenariat industriel': 'type-part',
+  'Exposition / Médiation': 'type-expo',
+  'Création d\'entreprise': 'type-entr',
+  'Autre': 'type-autr'
+};
 
-// ── Utils ──────────────────────────────────────────
-const $ = id => document.getElementById(id);
-const fmt = d => d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-const fmtNum = n => Number(n || 0).toLocaleString('fr-FR');
-const fmtEur = n => Number(n || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-
-function typeBadgeClass(type) {
-  const map = {
-    'colloque': 'badge-colloque', 'conférence': 'badge-conférence',
-    'séminaire': 'badge-séminaire', 'workshop': 'badge-workshop',
-    "journée d'étude": 'badge-journée', 'exposition': 'badge-exposition'
-  };
-  return map[type] || 'badge-autre';
-}
-
-function statusClass(s) { return 'status-' + s.replace(' ', '-'); }
-
-function showToast(msg, type = 'success') {
-  const t = document.createElement('div');
-  t.className = `toast toast-${type}`;
-  t.textContent = msg;
-  $('toastContainer').appendChild(t);
-  setTimeout(() => t.remove(), 3500);
-}
-
-async function apiFetch(path, opts = {}) {
-  const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Erreur réseau' }));
-    throw new Error(err.error || 'Erreur');
+/* ===== API helpers ===== */
+const API = {
+  async get(path) {
+    const r = await fetch(path);
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async post(path, body) {
+    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async put(path, body) {
+    const r = await fetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async del(path) {
+    const r = await fetch(path, { method: 'DELETE' });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
   }
-  return res.json();
+};
+
+/* ===== Toast ===== */
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => { t.className = 'toast'; }, 3500);
 }
 
-// ── Navigation ────────────────────────────────────
-function setView(name) {
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const view = $('view-' + name);
-  if (view) view.classList.add('active');
-  const navItem = document.querySelector(`[data-view="${name}"]`);
-  if (navItem) navItem.classList.add('active');
-  const titles = { dashboard: 'Tableau de bord', events: 'Événements', calendar: 'Calendrier', ai: 'Assistant IA' };
-  $('topbarTitle').textContent = titles[name] || name;
-  if (name === 'dashboard') loadDashboard();
-  if (name === 'events') loadEventsList();
-  if (name === 'calendar') renderCalendar();
-}
-
+/* ===== Navigation ===== */
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', e => {
     e.preventDefault();
-    setView(item.dataset.view);
-    if (window.innerWidth < 768) $('sidebar').classList.remove('open');
+    const view = item.dataset.view;
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById(`view-${view}`).classList.add('active');
+    document.getElementById('viewTitle').textContent = item.textContent.trim();
+    if (view === 'dashboard') loadDashboard();
+    if (view === 'events') loadEvents();
+    if (view === 'report') populateReportYears();
+    // Close sidebar on mobile
+    document.getElementById('sidebar').classList.remove('open');
   });
 });
-document.querySelectorAll('.card-link').forEach(link => {
-  link.addEventListener('click', e => { e.preventDefault(); setView(link.dataset.view); });
-});
-$('menuToggle').addEventListener('click', () => $('sidebar').classList.toggle('open'));
 
-// ── Dashboard ─────────────────────────────────────
+document.getElementById('menuBtn').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+});
+
+/* ===== Dashboard ===== */
 async function loadDashboard() {
   try {
-    const [stats, events] = await Promise.all([apiFetch('/api/stats'), apiFetch('/api/events')]);
-    allEvents = events;
+    const [stats, events] = await Promise.all([
+      API.get('/api/stats'),
+      API.get('/api/events')
+    ]);
+    state.events = events;
 
-    $('statTotal').textContent = stats.total;
-    $('statUpcoming').textContent = stats.upcoming;
-    $('statDone').textContent = stats.terminé;
-    $('statParticipants').textContent = fmtNum(stats.totalParticipants);
-    $('statBudget').textContent = fmtEur(stats.totalBudget);
+    document.getElementById('statTotal').textContent = stats.total;
+    const currentYear = new Date().getFullYear().toString();
+    document.getElementById('statAnnee').textContent = stats.par_annee[currentYear] || 0;
+    document.getElementById('statLabo').textContent = Object.keys(stats.par_laboratoire).length;
+    document.getElementById('statTypes').textContent = Object.keys(stats.par_type).length;
 
-    // Upcoming
-    const upcoming = events.filter(e => new Date(e.date) >= new Date() && e.status !== 'annulé')
-      .sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 5);
-    $('upcomingList').innerHTML = upcoming.length ? upcoming.map(eventItemHtml).join('') :
-      '<div class="empty-state"><div class="empty-state-icon">📅</div><div class="empty-state-text">Aucun événement à venir</div></div>';
-
-    // Ongoing
-    const ongoing = events.filter(e => e.status === 'en cours').slice(0, 4);
-    $('ongoingList').innerHTML = ongoing.length ? ongoing.map(eventItemHtml).join('') :
-      '<div class="empty-state"><div class="empty-state-icon">⏳</div><div class="empty-state-text">Aucun événement en cours</div></div>';
-
-    // Type chart
-    const total = stats.total || 1;
-    $('typeChart').innerHTML = Object.entries(stats.byType).map(([type, count]) => `
-      <div class="type-bar-row">
-        <div class="type-bar-label">${type}</div>
-        <div class="type-bar-track"><div class="type-bar-fill" style="width:${Math.round(count / total * 100)}%"></div></div>
-        <div class="type-bar-count">${count}</div>
-      </div>`).join('');
-
-    // Domains
-    const domains = Object.entries(stats.byDomain).sort((a, b) => b[1] - a[1]).slice(0, 14);
-    $('domainTags').innerHTML = domains.map(([d, c]) =>
-      `<span class="tag tag-domain">${d} <span class="tag-count">${c}</span></span>`).join('');
-
-    attachEventItemListeners();
-  } catch (err) { showToast('Erreur de chargement: ' + err.message, 'error'); }
+    renderBarChart('chartTypes', stats.par_type, 5);
+    renderBarChart('chartAnnees', stats.par_annee, 5);
+    renderRecentEvents(events.slice(0, 5));
+  } catch (err) {
+    console.error(err);
+  }
 }
 
-function eventItemHtml(e) {
-  return `<div class="event-item status-${e.status.replace(' ', '-')}" data-id="${e.id}">
-    <div class="event-item-info">
-      <div class="event-item-title">${e.title}</div>
-      <div class="event-item-meta">${e.laboratory || e.organizer || ''}</div>
-    </div>
-    <div class="event-item-date">${fmt(e.date)}</div>
-  </div>`;
-}
-
-function attachEventItemListeners() {
-  document.querySelectorAll('.event-item').forEach(el => {
-    el.addEventListener('click', () => openDetail(el.dataset.id));
-  });
-}
-
-// ── Events List ───────────────────────────────────
-async function loadEventsList() {
-  const search = $('searchInput').value;
-  const status = $('filterStatus').value;
-  const type = $('filterType').value;
-  const params = new URLSearchParams();
-  if (search) params.set('search', search);
-  if (status) params.set('status', status);
-  if (type) params.set('type', type);
-  try {
-    const events = await apiFetch('/api/events?' + params);
-    allEvents = events;
-    renderEventCards(events);
-  } catch (err) { showToast('Erreur: ' + err.message, 'error'); }
-}
-
-function renderEventCards(events) {
-  if (!events.length) {
-    $('eventsList').innerHTML = `<div class="empty-state" style="grid-column:1/-1">
-      <div class="empty-state-icon">🔍</div>
-      <div class="empty-state-text">Aucun événement trouvé</div></div>`;
+function renderBarChart(containerId, data, maxItems) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, maxItems);
+  if (!sorted.length) {
+    container.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Aucune donnée</p>';
     return;
   }
-  $('eventsList').innerHTML = events.map(e => `
-    <div class="event-card" data-id="${e.id}">
-      <div class="event-card-top">
-        <span class="event-type-badge ${typeBadgeClass(e.type)}">${e.type}</span>
-        <div class="event-card-title">${e.title}</div>
-      </div>
-      <div class="event-card-body">
-        <div class="event-card-meta">
-          <div class="event-meta-row"><span class="event-meta-icon">📅</span>${fmt(e.date)}${e.endDate && e.endDate !== e.date ? ' → ' + fmt(e.endDate) : ''}</div>
-          ${e.location ? `<div class="event-meta-row"><span class="event-meta-icon">📍</span>${e.location}</div>` : ''}
-          ${e.organizer ? `<div class="event-meta-row"><span class="event-meta-icon">👤</span>${e.organizer}</div>` : ''}
-          ${e.laboratory ? `<div class="event-meta-row"><span class="event-meta-icon">🔬</span>${e.laboratory}</div>` : ''}
-        </div>
-        <div class="detail-tags">
-          ${(e.domains || []).slice(0, 3).map(d => `<span class="tag tag-domain">${d}</span>`).join('')}
-        </div>
-      </div>
-      <div class="event-card-footer">
-        <span class="status-badge ${statusClass(e.status)}">${e.status}</span>
-        <div class="event-card-actions">
-          <span class="event-meta-row" style="margin-right:8px"><span class="event-meta-icon">👥</span>${fmtNum(e.participants)}</span>
-          <button class="btn-icon edit-btn" data-id="${e.id}" title="Modifier">✏️</button>
-          <button class="btn-icon delete-btn" data-id="${e.id}" title="Supprimer">🗑️</button>
-        </div>
+  const max = sorted[0][1];
+  sorted.forEach(([label, count]) => {
+    const pct = Math.round((count / max) * 100);
+    container.innerHTML += `
+      <div class="bar-item">
+        <span class="bar-label" title="${label}">${label}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <span class="bar-count">${count}</span>
+      </div>`;
+  });
+}
+
+function renderRecentEvents(events) {
+  const container = document.getElementById('recentEvents');
+  if (!events.length) {
+    container.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:8px 0">Aucun événement encore enregistré.</p>';
+    return;
+  }
+  container.innerHTML = events.map(e => `
+    <div class="recent-item">
+      <span class="badge recent-badge ${TYPE_CLASS[e.type] || 'type-autr'}">${e.type}</span>
+      <div class="recent-info">
+        <div class="recent-title">${e.titre}</div>
+        <div class="recent-meta">${e.chercheur || '—'} · ${e.laboratoire || '—'} · ${formatDate(e.date)}</div>
       </div>
     </div>`).join('');
-
-  document.querySelectorAll('.event-card').forEach(c => {
-    c.addEventListener('click', () => openDetail(c.dataset.id));
-  });
-  document.querySelectorAll('.edit-btn').forEach(b => {
-    b.addEventListener('click', e => { e.stopPropagation(); openEdit(b.dataset.id); });
-  });
-  document.querySelectorAll('.delete-btn').forEach(b => {
-    b.addEventListener('click', e => { e.stopPropagation(); deleteEvent(b.dataset.id); });
-  });
 }
 
-let searchTimer;
-$('searchInput').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(loadEventsList, 300); });
-$('filterStatus').addEventListener('change', loadEventsList);
-$('filterType').addEventListener('change', loadEventsList);
-
-// ── Event Form ────────────────────────────────────
-function openCreate() {
-  $('eventForm').reset();
-  $('eventId').value = '';
-  $('modalTitle').textContent = 'Nouvel événement';
-  $('eventModal').classList.add('open');
-}
-
-function openEdit(id) {
-  const ev = allEvents.find(e => e.id === id);
-  if (!ev) return;
-  $('eventId').value = ev.id;
-  $('fTitle').value = ev.title || '';
-  $('fType').value = ev.type || '';
-  $('fStatus').value = ev.status || 'planifié';
-  $('fDate').value = ev.date || '';
-  $('fEndDate').value = ev.endDate || '';
-  $('fLocation').value = ev.location || '';
-  $('fOrganizer').value = ev.organizer || '';
-  $('fLaboratory').value = ev.laboratory || '';
-  $('fParticipants').value = ev.participants || '';
-  $('fBudget').value = ev.budget || '';
-  $('fDomains').value = (ev.domains || []).join(', ');
-  $('fObjectives').value = ev.objectives || '';
-  $('fDescription').value = ev.description || '';
-  $('modalTitle').textContent = 'Modifier l\'événement';
-  $('eventModal').classList.add('open');
-}
-
-function closeModal(id) { $(id).classList.remove('open'); }
-
-$('newEventBtn').addEventListener('click', openCreate);
-$('modalClose').addEventListener('click', () => closeModal('eventModal'));
-$('cancelBtn').addEventListener('click', () => closeModal('eventModal'));
-$('eventModal').addEventListener('click', e => { if (e.target === $('eventModal')) closeModal('eventModal'); });
-
-$('saveEventBtn').addEventListener('click', async () => {
-  const id = $('eventId').value;
-  const payload = {
-    title: $('fTitle').value.trim(),
-    type: $('fType').value,
-    status: $('fStatus').value,
-    date: $('fDate').value,
-    endDate: $('fEndDate').value,
-    location: $('fLocation').value.trim(),
-    organizer: $('fOrganizer').value.trim(),
-    laboratory: $('fLaboratory').value.trim(),
-    participants: Number($('fParticipants').value) || 0,
-    budget: Number($('fBudget').value) || 0,
-    domains: $('fDomains').value.split(',').map(s => s.trim()).filter(Boolean),
-    objectives: $('fObjectives').value.trim(),
-    description: $('fDescription').value.trim()
-  };
-  if (!payload.title || !payload.type || !payload.date) {
-    showToast('Veuillez remplir les champs obligatoires', 'error'); return;
-  }
+/* ===== Events List ===== */
+async function loadEvents(params = {}) {
   try {
-    if (id) {
-      await apiFetch('/api/events/' + id, { method: 'PUT', body: payload });
-      showToast('Événement mis à jour');
-    } else {
-      await apiFetch('/api/events', { method: 'POST', body: payload });
-      showToast('Événement créé');
-    }
-    closeModal('eventModal');
-    loadEventsList();
-    loadDashboard();
-  } catch (err) { showToast('Erreur: ' + err.message, 'error'); }
+    const qs = new URLSearchParams(params).toString();
+    const events = await API.get(`/api/events${qs ? '?' + qs : ''}`);
+    state.events = events;
+    renderEventsList(events);
+    populateYearFilter(events);
+  } catch (err) {
+    showToast('Erreur lors du chargement des événements', 'error');
+  }
+}
+
+function populateYearFilter(events) {
+  const years = [...new Set(events.map(e => e.date?.substring(0, 4)).filter(Boolean))].sort().reverse();
+  const sel = document.getElementById('filterAnnee');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Toutes les années</option>';
+  years.forEach(y => sel.innerHTML += `<option value="${y}" ${y === current ? 'selected' : ''}>${y}</option>`);
+}
+
+function renderEventsList(events) {
+  const container = document.getElementById('eventsList');
+  if (!events.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📭</div>
+        <div class="empty-text">Aucun événement trouvé</div>
+        <div class="empty-sub">Ajoutez votre premier événement de valorisation</div>
+      </div>`;
+    return;
+  }
+  container.innerHTML = events.map(e => `
+    <div class="event-card" data-id="${e.id}">
+      <div class="event-card-header">
+        <div class="event-card-title">${e.titre}</div>
+        <div class="event-card-actions">
+          <button class="icon-btn" title="Modifier" onclick="event.stopPropagation(); openEditModal('${e.id}')">✏️</button>
+          <button class="icon-btn" title="Supprimer" onclick="event.stopPropagation(); deleteEvent('${e.id}')">🗑️</button>
+        </div>
+      </div>
+      <span class="badge ${TYPE_CLASS[e.type] || 'type-autr'}">${e.type}</span>
+      <div class="event-card-meta">
+        ${e.chercheur ? `<span>👤 ${e.chercheur}</span>` : ''}
+        ${e.laboratoire ? `<span>🏛️ ${e.laboratoire}</span>` : ''}
+        ${e.date ? `<span>📅 ${formatDate(e.date)}</span>` : ''}
+        ${e.lieu ? `<span>📍 ${e.lieu}</span>` : ''}
+      </div>
+      ${e.description ? `<div class="event-card-desc">${e.description}</div>` : ''}
+      ${e.mots_cles?.length ? `
+        <div class="tags-list">
+          ${e.mots_cles.map(t => `<span class="tag">${t}</span>`).join('')}
+        </div>` : ''}
+    </div>`).join('');
+}
+
+/* ===== Search / Filter ===== */
+let searchTimer;
+document.getElementById('searchInput').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(applyFilters, 300);
+});
+document.getElementById('filterType').addEventListener('change', applyFilters);
+document.getElementById('filterAnnee').addEventListener('change', applyFilters);
+
+function applyFilters() {
+  const params = {};
+  const search = document.getElementById('searchInput').value.trim();
+  const type = document.getElementById('filterType').value;
+  const annee = document.getElementById('filterAnnee').value;
+  if (search) params.search = search;
+  if (type) params.type = type;
+  if (annee) params.annee = annee;
+  loadEvents(params);
+}
+
+/* ===== Modal ===== */
+document.getElementById('btnNewEvent').addEventListener('click', openNewModal);
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.getElementById('btnCancelModal').addEventListener('click', closeModal);
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
 });
 
+function openNewModal() {
+  state.editingId = null;
+  state.currentTags = [];
+  document.getElementById('modalTitle').textContent = 'Nouvel événement';
+  document.getElementById('eventId').value = '';
+  clearForm();
+  openModal();
+}
+
+async function openEditModal(id) {
+  try {
+    const event = await API.get(`/api/events/${id}`);
+    state.editingId = id;
+    state.currentTags = event.mots_cles || [];
+    document.getElementById('modalTitle').textContent = 'Modifier l\'événement';
+    document.getElementById('eventId').value = id;
+    document.getElementById('eventTitre').value = event.titre || '';
+    document.getElementById('eventType').value = event.type || '';
+    document.getElementById('eventDate').value = event.date || '';
+    document.getElementById('eventChercheur').value = event.chercheur || '';
+    document.getElementById('eventLaboratoire').value = event.laboratoire || '';
+    document.getElementById('eventLieu').value = event.lieu || '';
+    document.getElementById('eventUrl').value = event.url || '';
+    document.getElementById('eventDescription').value = event.description || '';
+    document.getElementById('eventImpact').value = event.impact || '';
+    renderTags();
+    openModal();
+  } catch (err) {
+    showToast('Erreur lors du chargement', 'error');
+  }
+}
+
+function openModal() {
+  document.getElementById('modalOverlay').classList.add('open');
+  document.getElementById('eventTitre').focus();
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+function clearForm() {
+  ['eventTitre','eventType','eventDate','eventChercheur','eventLaboratoire',
+   'eventLieu','eventUrl','eventDescription','eventImpact'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  renderTags();
+}
+
+/* ===== Save Event ===== */
+document.getElementById('btnSaveEvent').addEventListener('click', async () => {
+  const titre = document.getElementById('eventTitre').value.trim();
+  const type = document.getElementById('eventType').value;
+  const date = document.getElementById('eventDate').value;
+
+  if (!titre || !type || !date) {
+    showToast('Veuillez remplir les champs obligatoires (titre, type, date)', 'error');
+    return;
+  }
+
+  const payload = {
+    titre,
+    type,
+    date,
+    chercheur: document.getElementById('eventChercheur').value.trim(),
+    laboratoire: document.getElementById('eventLaboratoire').value.trim(),
+    lieu: document.getElementById('eventLieu').value.trim(),
+    url: document.getElementById('eventUrl').value.trim(),
+    description: document.getElementById('eventDescription').value.trim(),
+    impact: document.getElementById('eventImpact').value.trim(),
+    mots_cles: state.currentTags
+  };
+
+  const btn = document.getElementById('btnSaveEvent');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span> Enregistrement...';
+
+  try {
+    if (state.editingId) {
+      await API.put(`/api/events/${state.editingId}`, payload);
+      showToast('Événement mis à jour', 'success');
+    } else {
+      await API.post('/api/events', payload);
+      showToast('Événement créé', 'success');
+    }
+    closeModal();
+    loadEvents();
+  } catch (err) {
+    showToast('Erreur lors de l\'enregistrement', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Enregistrer';
+  }
+});
+
+/* ===== Delete Event ===== */
 async function deleteEvent(id) {
   if (!confirm('Supprimer cet événement ?')) return;
   try {
-    await apiFetch('/api/events/' + id, { method: 'DELETE' });
-    showToast('Événement supprimé', 'info');
-    allEvents = allEvents.filter(e => e.id !== id);
-    renderEventCards(allEvents);
+    await API.del(`/api/events/${id}`);
+    showToast('Événement supprimé', 'success');
+    loadEvents();
     loadDashboard();
-  } catch (err) { showToast('Erreur: ' + err.message, 'error'); }
-}
-
-// ── Detail Modal ──────────────────────────────────
-function openDetail(id) {
-  const ev = allEvents.find(e => e.id === id);
-  if (!ev) return;
-  currentEventId = id;
-  $('detailTitle').textContent = ev.title;
-  $('detailBody').innerHTML = `
-    <div class="detail-grid">
-      <div>
-        <div class="detail-label">Type</div>
-        <div class="detail-value"><span class="event-type-badge ${typeBadgeClass(ev.type)}">${ev.type}</span></div>
-      </div>
-      <div>
-        <div class="detail-label">Statut</div>
-        <div class="detail-value"><span class="status-badge ${statusClass(ev.status)}">${ev.status}</span></div>
-      </div>
-      <div>
-        <div class="detail-label">Date</div>
-        <div class="detail-value">${fmt(ev.date)}${ev.endDate && ev.endDate !== ev.date ? ' → ' + fmt(ev.endDate) : ''}</div>
-      </div>
-      <div>
-        <div class="detail-label">Lieu</div>
-        <div class="detail-value">${ev.location || '—'}</div>
-      </div>
-      <div>
-        <div class="detail-label">Organisateur</div>
-        <div class="detail-value">${ev.organizer || '—'}</div>
-      </div>
-      <div>
-        <div class="detail-label">Laboratoire</div>
-        <div class="detail-value">${ev.laboratory || '—'}</div>
-      </div>
-      <div>
-        <div class="detail-label">Participants</div>
-        <div class="detail-value">${fmtNum(ev.participants)}</div>
-      </div>
-      <div>
-        <div class="detail-label">Budget</div>
-        <div class="detail-value">${fmtEur(ev.budget)}</div>
-      </div>
-      ${ev.domains?.length ? `<div class="detail-full">
-        <div class="detail-label">Domaines</div>
-        <div class="detail-tags">${ev.domains.map(d => `<span class="tag tag-domain">${d}</span>`).join('')}</div>
-      </div>` : ''}
-      ${ev.objectives ? `<div class="detail-full">
-        <div class="detail-label">Objectifs</div>
-        <div class="detail-value">${ev.objectives}</div>
-      </div>` : ''}
-      ${ev.description ? `<div class="detail-full">
-        <div class="detail-label">Description</div>
-        <div class="detail-desc">${ev.description}</div>
-      </div>` : ''}
-    </div>`;
-  $('detailModal').classList.add('open');
-}
-
-$('detailClose').addEventListener('click', () => closeModal('detailModal'));
-$('detailClose2').addEventListener('click', () => closeModal('detailModal'));
-$('detailModal').addEventListener('click', e => { if (e.target === $('detailModal')) closeModal('detailModal'); });
-$('detailEdit').addEventListener('click', () => { closeModal('detailModal'); openEdit(currentEventId); });
-$('detailReport').addEventListener('click', () => generateReport(currentEventId));
-
-// ── Calendar ──────────────────────────────────────
-function renderCalendar() {
-  const now = new Date();
-  if (!calYear) { calYear = now.getFullYear(); calMonth = now.getMonth(); }
-
-  const title = new Date(calYear, calMonth, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-  $('calTitle').textContent = title.charAt(0).toUpperCase() + title.slice(1);
-
-  const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-  const firstDay = new Date(calYear, calMonth, 1);
-  const lastDay = new Date(calYear, calMonth + 1, 0);
-  let startDow = firstDay.getDay() - 1; if (startDow < 0) startDow = 6;
-
-  let html = days.map(d => `<div class="cal-day-header">${d}</div>`).join('');
-  for (let i = 0; i < startDow; i++) {
-    const d = new Date(firstDay); d.setDate(d.getDate() - (startDow - i));
-    html += `<div class="cal-day other-month"><div class="cal-day-num">${d.getDate()}</div></div>`;
-  }
-  for (let d = 1; d <= lastDay.getDate(); d++) {
-    const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const todayStr = now.toISOString().slice(0, 10);
-    const dayEvents = allEvents.filter(e => e.date === dateStr || (e.date <= dateStr && e.endDate >= dateStr));
-    html += `<div class="cal-day${dateStr === todayStr ? ' today' : ''}" data-date="${dateStr}">
-      <div class="cal-day-num">${d}</div>
-      <div class="cal-day-events">${dayEvents.map(e => `<div class="cal-event-dot" title="${e.title}">${e.title}</div>`).join('')}</div>
-    </div>`;
-  }
-  $('calendarGrid').innerHTML = html;
-
-  const monthEvents = allEvents.filter(e => {
-    const d = new Date(e.date);
-    return d.getFullYear() === calYear && d.getMonth() === calMonth;
-  }).sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  $('calEventList').innerHTML = monthEvents.length
-    ? monthEvents.map(e => `<div class="cal-event-entry" data-id="${e.id}">
-        <span class="event-type-badge ${typeBadgeClass(e.type)}">${e.type}</span>
-        <div style="flex:1">
-          <div class="event-item-title">${e.title}</div>
-          <div class="event-item-meta">${fmt(e.date)}</div>
-        </div>
-        <span class="status-badge ${statusClass(e.status)}">${e.status}</span>
-      </div>`).join('')
-    : '<div class="empty-state"><div class="empty-state-text">Aucun événement ce mois-ci</div></div>';
-
-  document.querySelectorAll('.cal-event-entry').forEach(el => {
-    el.addEventListener('click', () => openDetail(el.dataset.id));
-  });
-}
-
-$('calPrev').addEventListener('click', () => {
-  calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar();
-});
-$('calNext').addEventListener('click', () => {
-  calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar();
-});
-
-// ── AI Generate Description ───────────────────────
-$('generateDescBtn').addEventListener('click', async () => {
-  const title = $('fTitle').value.trim();
-  const type = $('fType').value;
-  if (!title || !type) { showToast('Renseignez le titre et le type pour générer une description', 'error'); return; }
-
-  $('aiDescOutput').textContent = 'Génération en cours...';
-  $('aiDescModal').classList.add('open');
-  try {
-    const res = await apiFetch('/api/ai/generate-description', {
-      method: 'POST',
-      body: { title, type, domains: $('fDomains').value.split(',').map(s => s.trim()).filter(Boolean), objectives: $('fObjectives').value }
-    });
-    generatedDescription = res.description;
-    $('aiDescOutput').textContent = res.description;
   } catch (err) {
-    $('aiDescOutput').textContent = 'Erreur: ' + err.message;
-  }
-});
-
-$('aiDescClose').addEventListener('click', () => closeModal('aiDescModal'));
-$('aiDescClose2').addEventListener('click', () => closeModal('aiDescModal'));
-$('aiDescUse').addEventListener('click', () => { $('fDescription').value = generatedDescription; closeModal('aiDescModal'); });
-
-// ── AI Report ─────────────────────────────────────
-async function generateReport(id) {
-  $('reportOutput').textContent = 'Génération du rapport en cours...';
-  $('reportModal').classList.add('open');
-  closeModal('detailModal');
-  try {
-    const res = await apiFetch('/api/ai/generate-report', { method: 'POST', body: { eventId: id } });
-    $('reportOutput').textContent = res.report;
-  } catch (err) {
-    $('reportOutput').textContent = 'Erreur: ' + err.message;
+    showToast('Erreur lors de la suppression', 'error');
   }
 }
 
-$('reportClose').addEventListener('click', () => closeModal('reportModal'));
-$('reportClose2').addEventListener('click', () => closeModal('reportModal'));
-$('reportCopy').addEventListener('click', () => {
-  navigator.clipboard.writeText($('reportOutput').textContent).then(() => showToast('Rapport copié'));
+/* ===== Tags ===== */
+document.getElementById('tagInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    addTag(e.target.value.trim());
+    e.target.value = '';
+  }
 });
 
-// ── AI Tools Panel ────────────────────────────────
-$('toolGenerateDesc').addEventListener('click', () => {
-  setView('events');
-  setTimeout(() => openCreate(), 100);
-  showToast('Créez un événement puis cliquez sur "Générer avec IA"', 'info');
-});
+function addTag(tag) {
+  if (!tag || state.currentTags.includes(tag)) return;
+  state.currentTags.push(tag);
+  renderTags();
+}
 
-$('toolGenerateReport').addEventListener('click', async () => {
-  const finished = allEvents.filter(e => e.status === 'terminé');
-  if (!finished.length) { showToast('Aucun événement terminé pour générer un bilan', 'error'); return; }
-  $('aiOutputTitle').textContent = 'Choisissez un événement';
-  $('aiOutput').innerHTML = finished.map(e =>
-    `<button class="tool-btn" style="margin-bottom:6px" onclick="generateReport('${e.id}')">
-      <span class="tool-icon">📄</span><div><div class="tool-name">${e.title}</div><div class="tool-desc">${fmt(e.date)}</div></div>
-    </button>`).join('');
-  $('aiOutputCard').style.display = 'block';
-});
+function removeTag(tag) {
+  state.currentTags = state.currentTags.filter(t => t !== tag);
+  renderTags();
+}
 
-$('toolSuggestIdeas').addEventListener('click', async () => {
-  $('aiOutputTitle').textContent = 'Idées d\'événements IA';
-  $('aiOutput').textContent = 'Génération en cours...';
-  $('aiOutputCard').style.display = 'block';
+function renderTags() {
+  const container = document.getElementById('tagsContainer');
+  container.innerHTML = state.currentTags.map(t => `
+    <span class="tag-chip">
+      ${t}
+      <button class="tag-chip-remove" onclick="removeTag('${t}')">×</button>
+    </span>`).join('');
+}
+
+/* ===== AI: Generate Description ===== */
+document.getElementById('btnGenerateDesc').addEventListener('click', async () => {
+  const titre = document.getElementById('eventTitre').value.trim();
+  const type = document.getElementById('eventType').value;
+  if (!titre || !type) {
+    showToast('Remplissez d\'abord le titre et le type', 'error');
+    return;
+  }
+  const btn = document.getElementById('btnGenerateDesc');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading dark"></span> Génération...';
   try {
-    const res = await apiFetch('/api/ai/suggest', {
-      method: 'POST',
-      body: { prompt: "Propose 5 idées d'événements innovants de valorisation de la recherche adaptés à une université pluridisciplinaire comme Paris 8, en précisant le format, les thématiques, le public cible et des pistes de financement possibles." }
+    const data = await API.post('/api/ai/generate-description', {
+      titre,
+      type,
+      chercheur: document.getElementById('eventChercheur').value.trim(),
+      laboratoire: document.getElementById('eventLaboratoire').value.trim(),
+      date: document.getElementById('eventDate').value,
+      mots_cles: state.currentTags.join(', ')
     });
-    $('aiOutput').textContent = res.suggestion;
-  } catch (err) { $('aiOutput').textContent = 'Erreur: ' + err.message; }
+    document.getElementById('eventDescription').value = data.description;
+    showToast('Description générée par l\'IA', 'success');
+  } catch (err) {
+    showToast('Erreur IA : ' + (err.message || 'Vérifiez votre clé API'), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Générer avec l\'IA';
+  }
 });
 
-$('copyOutput').addEventListener('click', () => {
-  navigator.clipboard.writeText($('aiOutput').textContent).then(() => showToast('Copié'));
+/* ===== AI: Suggest Tags ===== */
+document.getElementById('btnSuggestTags').addEventListener('click', async () => {
+  const titre = document.getElementById('eventTitre').value.trim();
+  const type = document.getElementById('eventType').value;
+  if (!titre) {
+    showToast('Remplissez d\'abord le titre', 'error');
+    return;
+  }
+  const btn = document.getElementById('btnSuggestTags');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading dark"></span> Suggestions...';
+  try {
+    const data = await API.post('/api/ai/suggest-tags', {
+      titre,
+      type,
+      description: document.getElementById('eventDescription').value.trim()
+    });
+    data.tags.forEach(t => addTag(t));
+    showToast(`${data.tags.length} tags suggérés`, 'success');
+  } catch (err) {
+    showToast('Erreur IA : ' + (err.message || 'Vérifiez votre clé API'), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Suggérer des tags avec l\'IA';
+  }
 });
 
-// ── Chat ──────────────────────────────────────────
-function addChatMessage(role, content, loading = false) {
-  const el = document.createElement('div');
-  el.className = `chat-message ${role}`;
-  const avatarContent = role === 'user' ? 'Vous' : '⚡';
-  el.innerHTML = `<div class="chat-avatar">${avatarContent}</div>
-    <div class="chat-bubble${loading ? ' loading' : ''}">${loading ? '<div class="dot"></div><div class="dot"></div><div class="dot"></div>' : content}</div>`;
-  $('chatMessages').appendChild(el);
-  $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
-  return el;
+/* ===== Report ===== */
+function populateReportYears() {
+  const events = state.events;
+  const years = [...new Set(events.map(e => e.date?.substring(0, 4)).filter(Boolean))].sort().reverse();
+  const sel = document.getElementById('reportAnnee');
+  sel.innerHTML = '<option value="">Tous les événements</option>';
+  years.forEach(y => sel.innerHTML += `<option value="${y}">${y}</option>`);
 }
 
-async function sendChat(msg) {
-  if (!msg.trim()) return;
-  chatHistory.push({ role: 'user', content: msg });
-  addChatMessage('user', msg);
-  $('chatInput').value = '';
-  const loader = addChatMessage('assistant', '', true);
+document.getElementById('btnGenerateReport').addEventListener('click', async () => {
+  const periode = document.getElementById('reportPeriode').value.trim() || 'toute la période';
+  const format = document.getElementById('reportFormat').value;
+  const annee = document.getElementById('reportAnnee').value;
+
+  let eventsToUse = state.events;
+  if (annee) eventsToUse = eventsToUse.filter(e => e.date?.startsWith(annee));
+
+  if (!eventsToUse.length) {
+    showToast('Aucun événement à synthétiser pour cette période', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnGenerateReport');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span> Génération en cours...';
+
   try {
-    const stats = await apiFetch('/api/stats').catch(() => null);
-    const res = await apiFetch('/api/ai/chat', {
-      method: 'POST',
-      body: { messages: chatHistory, context: stats }
-    });
-    loader.remove();
-    chatHistory.push({ role: 'assistant', content: res.reply });
-    addChatMessage('assistant', res.reply.replace(/\n/g, '<br>'));
+    const data = await API.post('/api/ai/generate-report', { events: eventsToUse, periode, format });
+    document.getElementById('reportContent').textContent = data.rapport;
+    document.getElementById('reportResult').style.display = 'block';
+    document.getElementById('reportResult').scrollIntoView({ behavior: 'smooth' });
+    showToast('Rapport généré', 'success');
   } catch (err) {
-    loader.remove();
-    addChatMessage('assistant', `Erreur : ${err.message}. Vérifiez que votre clé API OpenAI est configurée dans le fichier .env.`);
+    showToast('Erreur IA : ' + (err.message || 'Vérifiez votre clé API'), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Générer avec l\'IA';
+  }
+});
+
+document.getElementById('btnCopyReport').addEventListener('click', () => {
+  const text = document.getElementById('reportContent').textContent;
+  navigator.clipboard.writeText(text).then(() => showToast('Rapport copié dans le presse-papiers', 'success'));
+});
+
+/* ===== Chat ===== */
+document.getElementById('btnSendChat').addEventListener('click', sendChat);
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+});
+
+function appendChatMessage(role, text) {
+  const container = document.getElementById('chatMessages');
+  const avatar = role === 'user' ? '👤' : '🤖';
+  const div = document.createElement('div');
+  div.className = `chat-message ${role}`;
+  div.innerHTML = `
+    <div class="chat-avatar">${avatar}</div>
+    <div class="chat-bubble">${text.replace(/\n/g, '<br>')}</div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  appendChatMessage('user', text);
+
+  state.chatHistory.push({ role: 'user', content: text });
+
+  const typingDiv = appendChatMessage('assistant', '');
+  typingDiv.querySelector('.chat-bubble').classList.add('typing');
+
+  const btn = document.getElementById('btnSendChat');
+  btn.disabled = true;
+
+  try {
+    const data = await API.post('/api/ai/chat', {
+      messages: state.chatHistory,
+      context: `L'application contient ${state.events.length} événements de valorisation.`
+    });
+    typingDiv.querySelector('.chat-bubble').classList.remove('typing');
+    typingDiv.querySelector('.chat-bubble').innerHTML = data.message.replace(/\n/g, '<br>');
+    state.chatHistory.push({ role: 'assistant', content: data.message });
+  } catch (err) {
+    typingDiv.querySelector('.chat-bubble').classList.remove('typing');
+    typingDiv.querySelector('.chat-bubble').innerHTML =
+      '<span style="color:var(--danger)">Erreur : ' + (err.message || 'Vérifiez votre clé API OpenAI') + '</span>';
+  } finally {
+    btn.disabled = false;
+    input.focus();
   }
 }
 
-$('chatSend').addEventListener('click', () => sendChat($('chatInput').value));
-$('chatInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat($('chatInput').value); } });
-document.querySelectorAll('.quick-btn').forEach(btn => {
-  btn.addEventListener('click', () => sendChat(btn.dataset.msg));
+/* ===== Auto-resize textarea ===== */
+document.getElementById('chatInput').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
 });
 
-// ── Init ──────────────────────────────────────────
+/* ===== Utils ===== */
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  try {
+    return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  } catch { return dateStr; }
+}
+
+/* ===== API Status Check ===== */
+async function checkApiStatus() {
+  const dot = document.querySelector('.status-dot');
+  const text = document.querySelector('.status-text');
+  try {
+    const r = await fetch('/api/stats');
+    if (r.ok) {
+      dot.classList.add('ok');
+      text.textContent = 'Connecté';
+    }
+  } catch {
+    dot.classList.add('error');
+    text.textContent = 'Hors ligne';
+  }
+}
+
+/* ===== Init ===== */
 async function init() {
-  try {
-    allEvents = await apiFetch('/api/events');
-  } catch (e) { /* handled per view */ }
-  loadDashboard();
+  await loadDashboard();
+  checkApiStatus();
+  // Load events in background for report years
+  const evts = await API.get('/api/events').catch(() => []);
+  state.events = evts;
+  populateYearFilter(evts);
 }
+
 init();
