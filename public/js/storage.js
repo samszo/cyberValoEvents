@@ -1,6 +1,6 @@
 // Module de persistance localStorage
 const EVENTS_KEY = 'cve_events';
-const API_KEY    = 'cve_openai_key';
+const API_KEY    = 'cve_albert_key';
 
 export function loadEvents() {
   const raw = localStorage.getItem(EVENTS_KEY);

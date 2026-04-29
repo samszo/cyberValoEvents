@@ -6,12 +6,15 @@ import { renderDashboard } from './views/dashboard.js';
 import { renderEvents }    from './views/events.js';
 import { initCalendar, renderCalendar, calPrev, calNext } from './views/calendar.js';
 import { initChat }        from './views/chat.js';
-import { generateDescription, generateReport, suggestIdeas } from './openai.js';
+import { generateDescription, generateReport, suggestIdeas, getModels } from './openai.js';
 
 // ── État global ────────────────────────────────────────────────────────────
 let events = loadEvents() || SAMPLE_EVENTS;
 let currentId = null;
 let generatedDesc = '';
+
+let models = await getModels();
+
 
 // ── Bootstrap modals ───────────────────────────────────────────────────────
 const bsModal = id => bootstrap.Modal.getOrCreateInstance(document.getElementById(id));

@@ -2,8 +2,8 @@
 import { getApiKey } from './storage.js';
 
 // Toutes les requêtes passent par proxy.php pour éviter le CORS.
-const PROXY = '/proxy.php';
-const apiUrl = path => `${PROXY}?path=${path}`;
+const PROXY = 'proxy.php';
+const apiUrl = 'https://albert.api.etalab.gouv.fr/v1/';// path => `${PROXY}?path=${path}`;
 const MODEL = 'gpt-4o-mini';
 
 async function complete(messages, { temperature = 0.7, max_tokens = 1200 } = {}) {
@@ -32,7 +32,7 @@ Réponds en français, de manière précise, professionnelle et bienveillante.`;
 
 export async function getModels() {
   const key = getApiKey();
-  const response = await fetch(apiUrl('models'), {
+  const response = await fetch(apiUrl+'models', {
     method: 'GET',
     headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' },
   });
