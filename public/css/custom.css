@@ -1,0 +1,79 @@
+/* ── Layout ── */
+.sidebar {
+  width: 230px;
+  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  transition: transform .25s;
+}
+.topbar { height: 56px; flex-shrink: 0; }
+.avatar-circle {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+
+/* ── Nav pills override ── */
+.sidebar .nav-link { font-size: .85rem; border-radius: 8px; }
+.sidebar .nav-link.active { background: var(--bs-primary) !important; color: #fff !important; }
+.sidebar .nav-link:not(.active):hover { background: rgba(255,255,255,.08); color: #fff !important; }
+
+/* ── Stat cards ── */
+.stat-card { border-radius: 10px; border: 1px solid var(--bs-border-color); }
+.stat-value { font-size: 2rem; font-weight: 700; line-height: 1; }
+
+/* ── Event card ── */
+.event-card { transition: box-shadow .15s, transform .15s; cursor: pointer; }
+.event-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,.12); transform: translateY(-2px); }
+
+/* ── Calendar ── */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-header-cell { text-align: center; font-size: .7rem; font-weight: 700; text-transform: uppercase; color: var(--bs-secondary); padding: 4px 0; }
+.cal-day { min-height: 72px; padding: 6px; border: 1px solid var(--bs-border-color); border-radius: 6px; font-size: .75rem; cursor: pointer; transition: background .1s; }
+.cal-day:hover { background: var(--bs-primary-bg-subtle); }
+.cal-day.today { background: var(--bs-primary-bg-subtle); border-color: var(--bs-primary); }
+.cal-day.other-month { opacity: .35; }
+.cal-day-num { font-weight: 600; margin-bottom: 3px; }
+.cal-evt-dot { font-size: .65rem; padding: 1px 4px; border-radius: 3px; background: var(--bs-primary-bg-subtle); color: var(--bs-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+
+/* ── Chat ── */
+.chat-card { height: calc(100vh - 120px); }
+.chat-messages { flex: 1; }
+.chat-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+.chat-bubble { max-width: 82%; }
+.chat-bubble.user-bubble { background: var(--bs-primary) !important; color: #fff; border-color: transparent !important; }
+.typing-dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bs-secondary); margin: 0 2px; animation: bounce .7s infinite; }
+.typing-dots span:nth-child(2) { animation-delay: .15s; }
+.typing-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-5px); } }
+
+/* ── AI output ── */
+.ai-output { white-space: pre-wrap; line-height: 1.65; max-height: 320px; overflow-y: auto; }
+
+/* ── Progress bars (type chart) ── */
+.type-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.type-label { font-size: .75rem; text-align: right; min-width: 100px; color: var(--bs-secondary); }
+
+/* ── Status badges ── */
+.badge-planifié   { background-color: #dbeafe; color: #1d4ed8; }
+.badge-en-cours   { background-color: #fef3c7; color: #b45309; }
+.badge-terminé    { background-color: #dcfce7; color: #15803d; }
+.badge-annulé     { background-color: #fee2e2; color: #b91c1c; }
+
+/* ── Type badges ── */
+.badge-colloque       { background: #ede9fe; color: #7c3aed; }
+.badge-conference     { background: #dbeafe; color: #1d4ed8; }
+.badge-seminaire      { background: #dcfce7; color: #15803d; }
+.badge-workshop       { background: #fef3c7; color: #b45309; }
+.badge-journee        { background: #fce7f3; color: #be185d; }
+.badge-exposition     { background: #f0f9ff; color: #0369a1; }
+.badge-autre          { background: #f3f4f6; color: #374151; }
+
+/* ── Empty state ── */
+.empty-state { text-align: center; padding: 40px; color: var(--bs-secondary); }
+
+/* ── Responsive sidebar ── */
+@media (max-width: 768px) {
+  .sidebar { position: fixed; z-index: 1050; transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+}

@@ -2,132 +2,130 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CyberValo Events — Paris 8</title>
-  <link rel="stylesheet" href="/css/style.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="css/custom.css" />
 </head>
-<body>
-  <!-- Sidebar -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <div class="logo">
-        <span class="logo-icon">⚡</span>
-        <div>
-          <div class="logo-title">CyberValo</div>
-          <div class="logo-sub">Paris 8</div>
-        </div>
-      </div>
-    </div>
-    <nav class="sidebar-nav">
-      <a href="#" class="nav-item active" data-view="dashboard">
-        <span class="nav-icon">📊</span> Tableau de bord
-      </a>
-      <a href="#" class="nav-item" data-view="events">
-        <span class="nav-icon">📅</span> Événements
-      </a>
-      <a href="#" class="nav-item" data-view="calendar">
-        <span class="nav-icon">🗓️</span> Calendrier
-      </a>
-      <a href="#" class="nav-item" data-view="ai">
-        <span class="nav-icon">🤖</span> Assistant IA
-      </a>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-info">
-        <div class="user-avatar">P8</div>
-        <div>
-          <div class="user-name">Université Paris 8</div>
-          <div class="user-role">Valorisation Recherche</div>
-        </div>
-      </div>
-    </div>
-  </aside>
+<body class="bg-light">
 
-  <!-- Main content -->
-  <main class="main" id="main">
-    <!-- Header -->
-    <header class="topbar">
-      <button class="menu-toggle" id="menuToggle">☰</button>
-      <div class="topbar-title" id="topbarTitle">Tableau de bord</div>
-      <div class="topbar-actions">
-        <button class="btn btn-primary" id="newEventBtn">+ Nouvel événement</button>
+<!-- ── Wrapper principal ── -->
+<div class="d-flex min-vh-100">
+
+  <!-- ── Sidebar ── -->
+  <nav id="sidebar" class="sidebar bg-dark text-white d-flex flex-column flex-shrink-0">
+    <div class="p-3 border-bottom border-secondary">
+      <div class="d-flex align-items-center gap-2">
+        <span class="fs-4">⚡</span>
+        <div>
+          <div class="fw-bold lh-sm">CyberValo</div>
+          <div class="text-muted small" style="font-size:.7rem">Université Paris 8</div>
+        </div>
       </div>
+    </div>
+
+    <ul class="nav nav-pills flex-column p-2 flex-grow-1 gap-1 mt-1">
+      <li class="nav-item">
+        <a href="#" class="nav-link text-white d-flex align-items-center gap-2 active" data-view="dashboard">
+          <i class="bi bi-speedometer2"></i> Tableau de bord
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#" class="nav-link text-white-50 d-flex align-items-center gap-2" data-view="events">
+          <i class="bi bi-calendar-event"></i> Événements
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#" class="nav-link text-white-50 d-flex align-items-center gap-2" data-view="calendar">
+          <i class="bi bi-calendar3"></i> Calendrier
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#" class="nav-link text-white-50 d-flex align-items-center gap-2" data-view="ai">
+          <i class="bi bi-robot"></i> Assistant IA
+        </a>
+      </li>
+    </ul>
+
+    <div class="p-3 border-top border-secondary">
+      <div class="d-flex align-items-center gap-2">
+        <div class="avatar-circle bg-primary">P8</div>
+        <div>
+          <div class="small fw-semibold text-white">Paris 8</div>
+          <div class="text-muted" style="font-size:.68rem">Valorisation Recherche</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Zone principale ── -->
+  <div class="flex-grow-1 d-flex flex-column overflow-hidden">
+
+    <!-- Topbar -->
+    <header class="topbar bg-white border-bottom px-4 d-flex align-items-center gap-3">
+      <button class="btn btn-sm btn-outline-secondary d-md-none" id="sidebarToggle">
+        <i class="bi bi-list"></i>
+      </button>
+      <h1 class="fs-5 fw-semibold mb-0 flex-grow-1" id="topbarTitle">Tableau de bord</h1>
+      <button class="btn btn-outline-secondary btn-sm" id="settingsBtn" title="Clé API OpenAI">
+        <i class="bi bi-key"></i> Clé API
+      </button>
+      <button class="btn btn-primary btn-sm" id="newEventBtn">
+        <i class="bi bi-plus-lg"></i> Nouvel événement
+      </button>
     </header>
 
-    <!-- Views -->
-    <div class="view-container">
+    <!-- Vues -->
+    <main class="flex-grow-1 overflow-auto p-4" id="mainContent">
 
-      <!-- Dashboard -->
-      <section class="view active" id="view-dashboard">
-        <div class="stats-grid" id="statsGrid">
-          <div class="stat-card">
-            <div class="stat-value" id="statTotal">—</div>
-            <div class="stat-label">Événements total</div>
+      <!-- ── Vue Dashboard ── -->
+      <div id="view-dashboard" class="view">
+        <!-- Stats -->
+        <div class="row g-3 mb-4" id="statsRow"></div>
+        <!-- Contenu -->
+        <div class="row g-3">
+          <div class="col-lg-7">
+            <div class="card h-100">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold"><i class="bi bi-arrow-up-right-circle text-primary me-1"></i>Prochains événements</span>
+                <a href="#" class="small text-decoration-none" data-view="events">Voir tout →</a>
+              </div>
+              <div class="card-body p-0" id="upcomingList"></div>
+            </div>
           </div>
-          <div class="stat-card accent-blue">
-            <div class="stat-value" id="statUpcoming">—</div>
-            <div class="stat-label">À venir</div>
-          </div>
-          <div class="stat-card accent-green">
-            <div class="stat-value" id="statDone">—</div>
-            <div class="stat-label">Terminés</div>
-          </div>
-          <div class="stat-card accent-orange">
-            <div class="stat-value" id="statParticipants">—</div>
-            <div class="stat-label">Participants cumulés</div>
-          </div>
-          <div class="stat-card accent-purple">
-            <div class="stat-value" id="statBudget">—</div>
-            <div class="stat-label">Budget total (€)</div>
+          <div class="col-lg-5">
+            <div class="card mb-3">
+              <div class="card-header fw-semibold">
+                <i class="bi bi-pie-chart text-primary me-1"></i>Répartition par type
+              </div>
+              <div class="card-body" id="typeChart"></div>
+            </div>
+            <div class="card">
+              <div class="card-header fw-semibold">
+                <i class="bi bi-tags text-primary me-1"></i>Domaines de recherche
+              </div>
+              <div class="card-body" id="domainTags"></div>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div class="dashboard-grid">
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Prochains événements</h2>
-              <a href="#" class="card-link" data-view="events">Voir tout →</a>
-            </div>
-            <div id="upcomingList" class="event-list"></div>
+      <!-- ── Vue Événements ── -->
+      <div id="view-events" class="view d-none">
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <div class="input-group input-group-sm" style="max-width:280px">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" id="searchInput" placeholder="Rechercher…" />
           </div>
-
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Répartition par type</h2>
-            </div>
-            <div id="typeChart" class="type-chart"></div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Événements en cours</h2>
-            </div>
-            <div id="ongoingList" class="event-list"></div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title">Domaines actifs</h2>
-            </div>
-            <div id="domainTags" class="tag-cloud"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Events list -->
-      <section class="view" id="view-events">
-        <div class="events-toolbar">
-          <input type="text" class="search-input" id="searchInput" placeholder="Rechercher un événement..." />
-          <select class="filter-select" id="filterStatus">
+          <select class="form-select form-select-sm w-auto" id="filterStatus">
             <option value="">Tous les statuts</option>
             <option value="planifié">Planifié</option>
             <option value="en cours">En cours</option>
             <option value="terminé">Terminé</option>
             <option value="annulé">Annulé</option>
           </select>
-          <select class="filter-select" id="filterType">
+          <select class="form-select form-select-sm w-auto" id="filterType">
             <option value="">Tous les types</option>
             <option value="colloque">Colloque</option>
             <option value="conférence">Conférence</option>
@@ -138,119 +136,130 @@
             <option value="autre">Autre</option>
           </select>
         </div>
-        <div id="eventsList" class="events-grid"></div>
-      </section>
+        <div class="row g-3" id="eventsList"></div>
+      </div>
 
-      <!-- Calendar -->
-      <section class="view" id="view-calendar">
-        <div class="card" style="height:100%">
-          <div class="calendar-header">
-            <button class="btn btn-ghost" id="calPrev">←</button>
-            <h2 id="calTitle" class="calendar-title"></h2>
-            <button class="btn btn-ghost" id="calNext">→</button>
+      <!-- ── Vue Calendrier ── -->
+      <div id="view-calendar" class="view d-none">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <button class="btn btn-sm btn-outline-secondary" id="calPrev"><i class="bi bi-chevron-left"></i></button>
+            <h2 class="fs-5 fw-semibold mb-0" id="calTitle"></h2>
+            <button class="btn btn-sm btn-outline-secondary" id="calNext"><i class="bi bi-chevron-right"></i></button>
           </div>
-          <div class="calendar-grid" id="calendarGrid"></div>
-          <div id="calEventList" class="cal-event-list"></div>
+          <div class="card-body">
+            <div id="calGrid"></div>
+            <hr />
+            <div id="calEventList"></div>
+          </div>
         </div>
-      </section>
+      </div>
 
-      <!-- AI Assistant -->
-      <section class="view" id="view-ai">
-        <div class="ai-layout">
-          <div class="card ai-chat-card">
-            <div class="card-header">
-              <h2 class="card-title">🤖 Assistant CyberValo</h2>
-              <span class="ai-badge">Propulsé par GPT-4o mini</span>
-            </div>
-            <div class="chat-messages" id="chatMessages">
-              <div class="chat-message assistant">
-                <div class="chat-avatar">⚡</div>
-                <div class="chat-bubble">
-                  Bonjour ! Je suis <strong>CyberValo</strong>, votre assistant expert en valorisation de la recherche à Paris 8.<br><br>
-                  Je peux vous aider à :
-                  <ul>
-                    <li>Rédiger des descriptions d'événements</li>
-                    <li>Analyser vos données d'événements</li>
-                    <li>Suggérer des formats et des intervenants</li>
-                    <li>Générer des rapports de bilan</li>
-                    <li>Conseiller sur les stratégies de valorisation</li>
-                  </ul>
-                  Comment puis-je vous aider aujourd'hui ?
+      <!-- ── Vue IA ── -->
+      <div id="view-ai" class="view d-none">
+        <div class="row g-3 h-100">
+          <!-- Chat -->
+          <div class="col-lg-8">
+            <div class="card d-flex flex-column chat-card">
+              <div class="card-header d-flex align-items-center justify-content-between">
+                <span class="fw-semibold"><i class="bi bi-robot text-primary me-1"></i>Assistant CyberValo</span>
+                <span class="badge bg-primary-subtle text-primary">GPT-4o mini</span>
+              </div>
+              <div class="card-body chat-messages overflow-auto" id="chatMessages">
+                <div class="d-flex gap-2 mb-3">
+                  <div class="chat-avatar bg-primary-subtle text-primary">⚡</div>
+                  <div class="chat-bubble bg-light border rounded-3 p-3 small">
+                    Bonjour ! Je suis <strong>CyberValo</strong>, votre assistant expert en valorisation de la recherche à Paris 8.<br><br>
+                    Je peux vous aider à :
+                    <ul class="mb-0 mt-1">
+                      <li>Rédiger des descriptions d'événements</li>
+                      <li>Analyser vos statistiques d'événements</li>
+                      <li>Générer des rapports de bilan</li>
+                      <li>Suggérer des formats et des financements</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="card-footer">
+                <div class="d-flex flex-wrap gap-1 mb-2" id="quickActions">
+                  <button class="btn btn-outline-secondary btn-sm" data-msg="Quels événements sont planifiés ce semestre ?">📅 Événements planifiés</button>
+                  <button class="btn btn-outline-secondary btn-sm" data-msg="Donne-moi des conseils pour améliorer la visibilité de nos événements de recherche.">💡 Conseils visibilité</button>
+                  <button class="btn btn-outline-secondary btn-sm" data-msg="Quels sont les principaux financeurs pour les événements scientifiques universitaires en France ?">💰 Financements</button>
+                  <button class="btn btn-outline-secondary btn-sm" data-msg="Propose un programme type pour un colloque de 2 jours en humanités numériques.">📋 Programme type</button>
+                </div>
+                <div class="input-group">
+                  <textarea class="form-control form-control-sm" id="chatInput" rows="2" placeholder="Posez votre question…"></textarea>
+                  <button class="btn btn-primary" id="chatSend"><i class="bi bi-send"></i></button>
                 </div>
               </div>
             </div>
-            <div class="chat-input-area">
-              <div class="chat-quick-actions">
-                <button class="quick-btn" data-msg="Quels événements sont prévus ce semestre ?">📅 Événements prévus</button>
-                <button class="quick-btn" data-msg="Donne-moi des conseils pour améliorer la visibilité de nos événements de recherche.">💡 Conseils visibilité</button>
-                <button class="quick-btn" data-msg="Quels sont les principaux financeurs pour les événements scientifiques universitaires en France ?">💰 Financements</button>
-                <button class="quick-btn" data-msg="Propose-moi un programme type pour un colloque de 2 jours en humanités numériques.">📋 Programme type</button>
-              </div>
-              <div class="chat-input-row">
-                <textarea class="chat-input" id="chatInput" placeholder="Posez votre question à CyberValo..." rows="2"></textarea>
-                <button class="btn btn-primary chat-send" id="chatSend">Envoyer</button>
-              </div>
-            </div>
           </div>
-
-          <div class="ai-tools-panel">
+          <!-- Outils IA -->
+          <div class="col-lg-4 d-flex flex-column gap-3">
             <div class="card">
-              <div class="card-header"><h2 class="card-title">Outils IA</h2></div>
-              <div class="ai-tools">
-                <button class="tool-btn" id="toolGenerateDesc">
-                  <span class="tool-icon">✍️</span>
+              <div class="card-header fw-semibold"><i class="bi bi-tools text-primary me-1"></i>Outils IA</div>
+              <div class="list-group list-group-flush">
+                <button class="list-group-item list-group-item-action d-flex align-items-center gap-3" id="toolGenerateDesc">
+                  <span class="fs-4">✍️</span>
                   <div>
-                    <div class="tool-name">Générer une description</div>
-                    <div class="tool-desc">Rédigez une description professionnelle</div>
+                    <div class="fw-semibold small">Générer une description</div>
+                    <div class="text-muted" style="font-size:.75rem">Description professionnelle pour un événement</div>
                   </div>
                 </button>
-                <button class="tool-btn" id="toolGenerateReport">
-                  <span class="tool-icon">📄</span>
+                <button class="list-group-item list-group-item-action d-flex align-items-center gap-3" id="toolGenerateReport">
+                  <span class="fs-4">📄</span>
                   <div>
-                    <div class="tool-name">Rapport de bilan</div>
-                    <div class="tool-desc">Générez un rapport pour un événement terminé</div>
+                    <div class="fw-semibold small">Rapport de bilan</div>
+                    <div class="text-muted" style="font-size:.75rem">Bilan structuré d'un événement terminé</div>
                   </div>
                 </button>
-                <button class="tool-btn" id="toolSuggestIdeas">
-                  <span class="tool-icon">💡</span>
+                <button class="list-group-item list-group-item-action d-flex align-items-center gap-3" id="toolSuggestIdeas">
+                  <span class="fs-4">💡</span>
                   <div>
-                    <div class="tool-name">Idées d'événements</div>
-                    <div class="tool-desc">Obtenez des suggestions thématiques</div>
+                    <div class="fw-semibold small">Idées d'événements</div>
+                    <div class="text-muted" style="font-size:.75rem">Suggestions thématiques innovantes</div>
                   </div>
                 </button>
               </div>
             </div>
-            <div class="card" id="aiOutputCard" style="display:none">
-              <div class="card-header">
-                <h2 class="card-title" id="aiOutputTitle">Résultat</h2>
-                <button class="btn btn-ghost btn-sm" id="copyOutput">📋 Copier</button>
+            <div class="card d-none" id="aiOutputCard">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold small" id="aiOutputTitle">Résultat</span>
+                <button class="btn btn-sm btn-outline-secondary" id="copyOutput"><i class="bi bi-clipboard"></i></button>
               </div>
-              <div class="ai-output" id="aiOutput"></div>
+              <div class="card-body">
+                <div class="ai-output small" id="aiOutput"></div>
+              </div>
             </div>
           </div>
         </div>
-      </section>
-    </div>
-  </main>
+      </div>
 
-  <!-- Modal: Create/Edit Event -->
-  <div class="modal-overlay" id="eventModal">
-    <div class="modal">
+    </main>
+  </div>
+</div>
+
+<!-- ══ Modals ══════════════════════════════════════════════════════════════ -->
+
+<!-- Créer / Modifier un événement -->
+<div class="modal fade" id="eventModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title" id="modalTitle">Nouvel événement</h2>
-        <button class="modal-close" id="modalClose">✕</button>
+        <h5 class="modal-title" id="eventModalTitle">Nouvel événement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <form id="eventForm">
-          <input type="hidden" id="eventId" />
-          <div class="form-grid">
-            <div class="form-group form-full">
-              <label class="form-label">Titre *</label>
-              <input type="text" class="form-input" id="fTitle" required placeholder="Intitulé de l'événement" />
+        <form id="eventForm" novalidate>
+          <input type="hidden" id="fId" />
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Titre *</label>
+              <input type="text" class="form-control" id="fTitle" required placeholder="Intitulé de l'événement" />
             </div>
-            <div class="form-group">
-              <label class="form-label">Type *</label>
-              <select class="form-input" id="fType" required>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Type *</label>
+              <select class="form-select" id="fType" required>
                 <option value="">— Sélectionner —</option>
                 <option value="colloque">Colloque</option>
                 <option value="conférence">Conférence</option>
@@ -261,121 +270,164 @@
                 <option value="autre">Autre</option>
               </select>
             </div>
-            <div class="form-group">
-              <label class="form-label">Statut</label>
-              <select class="form-input" id="fStatus">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Statut</label>
+              <select class="form-select" id="fStatus">
                 <option value="planifié">Planifié</option>
                 <option value="en cours">En cours</option>
                 <option value="terminé">Terminé</option>
                 <option value="annulé">Annulé</option>
               </select>
             </div>
-            <div class="form-group">
-              <label class="form-label">Date de début *</label>
-              <input type="date" class="form-input" id="fDate" required />
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Date de début *</label>
+              <input type="date" class="form-control" id="fDate" required />
             </div>
-            <div class="form-group">
-              <label class="form-label">Date de fin</label>
-              <input type="date" class="form-input" id="fEndDate" />
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Date de fin</label>
+              <input type="date" class="form-control" id="fEndDate" />
             </div>
-            <div class="form-group form-full">
-              <label class="form-label">Lieu</label>
-              <input type="text" class="form-input" id="fLocation" placeholder="Salle, bâtiment, adresse" />
+            <div class="col-12">
+              <label class="form-label fw-semibold">Lieu</label>
+              <input type="text" class="form-control" id="fLocation" placeholder="Salle, bâtiment, adresse" />
             </div>
-            <div class="form-group">
-              <label class="form-label">Organisateur</label>
-              <input type="text" class="form-input" id="fOrganizer" placeholder="Nom / équipe" />
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Organisateur</label>
+              <input type="text" class="form-control" id="fOrganizer" placeholder="Nom / équipe" />
             </div>
-            <div class="form-group">
-              <label class="form-label">Laboratoire</label>
-              <input type="text" class="form-input" id="fLaboratory" placeholder="Laboratoire ou équipe de recherche" />
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Laboratoire</label>
+              <input type="text" class="form-control" id="fLaboratory" placeholder="Labo ou équipe de recherche" />
             </div>
-            <div class="form-group">
-              <label class="form-label">Participants prévus</label>
-              <input type="number" class="form-input" id="fParticipants" min="0" placeholder="0" />
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Participants prévus</label>
+              <input type="number" class="form-control" id="fParticipants" min="0" placeholder="0" />
             </div>
-            <div class="form-group">
-              <label class="form-label">Budget (€)</label>
-              <input type="number" class="form-input" id="fBudget" min="0" placeholder="0" />
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Budget (€)</label>
+              <input type="number" class="form-control" id="fBudget" min="0" placeholder="0" />
             </div>
-            <div class="form-group form-full">
-              <label class="form-label">Domaines de recherche</label>
-              <input type="text" class="form-input" id="fDomains" placeholder="Ex: humanités numériques, sociologie, arts (séparés par des virgules)" />
+            <div class="col-12">
+              <label class="form-label fw-semibold">Domaines de recherche</label>
+              <input type="text" class="form-control" id="fDomains" placeholder="Ex: humanités numériques, sociologie, arts (séparés par des virgules)" />
             </div>
-            <div class="form-group form-full">
-              <label class="form-label">Objectifs</label>
-              <textarea class="form-input form-textarea" id="fObjectives" placeholder="Objectifs scientifiques et valorisation" rows="2"></textarea>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Objectifs</label>
+              <textarea class="form-control" id="fObjectives" rows="2" placeholder="Objectifs scientifiques et de valorisation"></textarea>
             </div>
-            <div class="form-group form-full">
-              <div class="desc-header">
-                <label class="form-label">Description</label>
-                <button type="button" class="btn btn-ghost btn-sm" id="generateDescBtn">✨ Générer avec IA</button>
+            <div class="col-12">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <label class="form-label fw-semibold mb-0">Description</label>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="generateDescBtn">
+                  <i class="bi bi-stars"></i> Générer avec IA
+                </button>
               </div>
-              <textarea class="form-input form-textarea" id="fDescription" placeholder="Description de l'événement" rows="4"></textarea>
+              <textarea class="form-control" id="fDescription" rows="4" placeholder="Description de l'événement"></textarea>
             </div>
           </div>
         </form>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-ghost" id="cancelBtn">Annuler</button>
-        <button class="btn btn-primary" id="saveEventBtn">Enregistrer</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="saveEventBtn">
+          <i class="bi bi-check-lg"></i> Enregistrer
+        </button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Modal: Event Detail -->
-  <div class="modal-overlay" id="detailModal">
-    <div class="modal modal-large">
+<!-- Détail événement -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title" id="detailTitle">Détail de l'événement</h2>
-        <button class="modal-close" id="detailClose">✕</button>
+        <h5 class="modal-title" id="detailModalTitle">Détail</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body" id="detailBody"></div>
+      <div class="modal-body" id="detailModalBody"></div>
       <div class="modal-footer">
-        <button class="btn btn-ghost" id="detailClose2">Fermer</button>
-        <button class="btn btn-secondary" id="detailReport">📄 Générer un bilan IA</button>
-        <button class="btn btn-primary" id="detailEdit">✏️ Modifier</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-outline-primary" id="detailReportBtn">
+          <i class="bi bi-file-text"></i> Bilan IA
+        </button>
+        <button type="button" class="btn btn-primary" id="detailEditBtn">
+          <i class="bi bi-pencil"></i> Modifier
+        </button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- AI Generate Description Modal -->
-  <div class="modal-overlay" id="aiDescModal">
-    <div class="modal">
+<!-- Rapport IA -->
+<div class="modal fade" id="reportModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title">✨ Description générée</h2>
-        <button class="modal-close" id="aiDescClose">✕</button>
+        <h5 class="modal-title"><i class="bi bi-file-text text-primary me-1"></i>Rapport de bilan IA</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="ai-output" id="aiDescOutput">Génération en cours...</div>
+        <div id="reportOutput" class="ai-output small"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-ghost" id="aiDescClose2">Annuler</button>
-        <button class="btn btn-primary" id="aiDescUse">Utiliser cette description</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        <button type="button" class="btn btn-primary" id="reportCopyBtn">
+          <i class="bi bi-clipboard"></i> Copier
+        </button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Report Modal -->
-  <div class="modal-overlay" id="reportModal">
-    <div class="modal modal-large">
+<!-- Description IA générée -->
+<div class="modal fade" id="aiDescModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title">📄 Rapport de bilan IA</h2>
-        <button class="modal-close" id="reportClose">✕</button>
+        <h5 class="modal-title"><i class="bi bi-stars text-primary me-1"></i>Description générée</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="ai-output" id="reportOutput">Génération en cours...</div>
+        <div id="aiDescOutput" class="ai-output small">Génération en cours…</div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-ghost" id="reportClose2">Fermer</button>
-        <button class="btn btn-primary" id="reportCopy">📋 Copier le rapport</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="aiDescUseBtn">Utiliser cette description</button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Toast -->
-  <div class="toast-container" id="toastContainer"></div>
+<!-- Paramètres (clé API) -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-key text-primary me-1"></i>Clé API OpenAI</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">Votre clé est stockée uniquement dans votre navigateur (localStorage). Elle n'est jamais envoyée à un tiers.</p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Clé API (sk-…)</label>
+          <input type="password" class="form-control" id="apiKeyInput" placeholder="sk-..." />
+        </div>
+        <div id="apiKeyStatus"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="saveApiKeyBtn">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-  <script src="/js/app.js"></script>
+<!-- ══ Toasts ═══════════════════════════════════════════════════════════════ -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+<!-- ══ Scripts ══════════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
